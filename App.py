@@ -22,9 +22,7 @@ st.set_page_config(
 st.title("Student Course Evaluation Analyzer")
 st.write("Analyze topics and sentiment from student course evaluations for BBT 4106 & BBT 4206.")
 
-
 # NLTK setup
-
 try:
     stopwords.words('english')
 except:
@@ -35,7 +33,6 @@ stop_words = set(stopwords.words('english'))
 stemmer = PorterStemmer()
 
 # Load models
-
 try:
     lda_model = joblib.load('./model/topic_model_lda.pkl')
     topic_vectorizer = joblib.load('./model/topic_vectorizer.pkl')
@@ -49,7 +46,6 @@ except Exception as e:
     st.stop()
 
 # Text cleaning functions
-
 def clean_topic_text(text):
     text = re.sub(r'[^a-zA-Z\s]', '', str(text).lower())
     text = re.sub(r'\s+', ' ', text).strip()
@@ -62,6 +58,7 @@ def clean_sentiment_text(text):
     tokens = [t for t in tokens if t not in stop_words]
     tokens = [stemmer.stem(t) for t in tokens]
     return " ".join(tokens)
+
 # Prediction functions
 def get_topic_prediction(text):
     try:
@@ -100,18 +97,17 @@ def get_sentiment_prediction(text):
     except Exception as e:
         return {'error': str(e)}
 
-
-# User input
+# Initialize session state
 if "input_text" not in st.session_state:
-    st.session_state.input_text = ""
+    st.session_state["input_text"] = ""
 
-input_text = st.text_area(
+# Text area
+st.text_area(
     "Student Feedback:",
-    value=st.session_state.input_text,
+    value=st.session_state["input_text"],
     key="input_text",
     height=150
 )
-
 
 # Sample buttons
 st.markdown("### Sample Inputs")
@@ -119,28 +115,27 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     if st.button("Positive Example"):
-        st.session_state.input_text = "The practical sessions were very helpful and the lecturer explained things well."
-        st.rerun()
+        st.session_state["input_text"] = "The practical sessions were very helpful and the lecturer explained things well."
+        st.experimental_rerun()
 
 with col2:
     if st.button("Neutral Example"):
-        st.session_state.input_text = "The course was fine, but some topics moved too fast."
-        st.rerun()
+        st.session_state["input_text"] = "The course was fine, but some topics moved too fast."
+        st.experimental_rerun()
 
 with col3:
     if st.button("Negative Example"):
-        st.session_state.input_text = "The course was confusing and the instructions for assignments were unclear."
-        st.rerun()
+        st.session_state["input_text"] = "The course was confusing and the instructions for assignments were unclear."
+        st.experimental_rerun()
 
 # Analyze button
-
 if st.button("Analyze Feedback"):
-    if not input_text.strip():
+    if not st.session_state["input_text"].strip():
         st.warning("Please enter some text to analyze.")
     else:
         with st.spinner("Analyzing..."):
-            topic_result = get_topic_prediction(input_text)
-            sentiment_result = get_sentiment_prediction(input_text)
+            topic_result = get_topic_prediction(st.session_state["input_text"])
+            sentiment_result = get_sentiment_prediction(st.session_state["input_text"])
 
             if 'error' in topic_result:
                 st.error(f"Topic Error: {topic_result['error']}")
@@ -173,12 +168,6 @@ if st.button("Analyze Feedback"):
                         st.progress(prob, text=f"{s.capitalize()}: {prob:.1%}")
 
 # Overall charts
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-# -----------------------------
-# Display Bar Charts
-# -----------------------------
 st.subheader("📊 Overall Topic & Sentiment Summary")
 
 try:
@@ -207,8 +196,6 @@ try:
 
 except Exception as e:
     st.warning(f"Unable to show charts: {e}")
-
-
 
 # Footer
 st.markdown("---")
