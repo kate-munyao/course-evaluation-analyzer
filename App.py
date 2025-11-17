@@ -102,27 +102,35 @@ def get_sentiment_prediction(text):
 
 
 # User input
+if "input_text" not in st.session_state:
+    st.session_state.input_text = ""
 
-st.subheader("Enter Feedback Below")
 input_text = st.text_area(
     "Student Feedback:",
-    placeholder="Example: The labs were helpful and the instructor explained concepts clearly.",
+    value=st.session_state.input_text,
+    key="input_text",
     height=150
 )
+
 
 # Sample buttons
 st.markdown("### Sample Inputs")
 col1, col2, col3 = st.columns(3)
 
-if col1.button("Positive Example"):
-    input_text = "The practical sessions were very helpful and the lecturer explained things well."
-    st.experimental_rerun()
-if col2.button("Neutral Example"):
-    input_text = "The course was fine, but some topics moved too fast."
-    st.experimental_rerun()
-if col3.button("Negative Example"):
-    input_text = "The course was confusing and the instructions for assignments were unclear."
-    st.experimental_rerun()
+with col1:
+    if st.button("Positive Example"):
+        st.session_state.input_text = "The practical sessions were very helpful and the lecturer explained things well."
+        st.rerun()
+
+with col2:
+    if st.button("Neutral Example"):
+        st.session_state.input_text = "The course was fine, but some topics moved too fast."
+        st.rerun()
+
+with col3:
+    if st.button("Negative Example"):
+        st.session_state.input_text = "The course was confusing and the instructions for assignments were unclear."
+        st.rerun()
 
 # Analyze button
 
@@ -165,37 +173,41 @@ if st.button("Analyze Feedback"):
                         st.progress(prob, text=f"{s.capitalize()}: {prob:.1%}")
 
 # Overall charts
-st.subheader("📊 Overall Evaluation Charts")
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# -----------------------------
+# Display Bar Charts
+# -----------------------------
+st.subheader("📊 Overall Topic & Sentiment Summary")
+
 try:
+    # Load the full dataset with topics & sentiments
     df_full = pd.read_csv("./data/course_evals_with_topics_and_sentiments.csv")
 
-    # Topic Distribution
-    st.markdown("### Topic Distribution")
-    topic_counts = df_full['topic_label'].value_counts()
-    fig1, ax1 = plt.subplots()
-    topic_counts.plot(kind='bar', ax=ax1, color='skyblue', edgecolor='black')
-    ax1.set_ylabel("Number of Evaluations")
-    ax1.set_xlabel("Topic")
-    ax1.set_title("Number of Evaluations per Topic")
-    plt.xticks(rotation=45, ha='right')
+    # Topic Distribution Bar Chart
+    topic_counts = df_full['topic_label'].value_counts().sort_index()
+    fig1, ax1 = plt.subplots(figsize=(6, 3))  # Medium size
+    sns.barplot(x=topic_counts.values, y=topic_counts.index, palette="viridis", ax=ax1)
+    ax1.set_xlabel("Number of Evaluations")
+    ax1.set_ylabel("Topic")
+    ax1.set_title("Overall Topic Distribution")
     st.pyplot(fig1)
 
-    # Sentiment by Topic
-    st.markdown("### Sentiment Distribution by Topic")
-    sentiment_by_topic = df_full.groupby(['topic_label', 'predicted_sentiment']).size().unstack(fill_value=0)
+    # Sentiment Distribution by Topic Bar Chart
     sentiment_order = ["positive", "neutral", "negative"]
     colors = ["green", "orange", "red"]
-
-    fig2, ax2 = plt.subplots(figsize=(10, 5))
-    sentiment_by_topic[sentiment_order].plot(kind='bar', stacked=False, color=colors, ax=ax2, edgecolor='black')
+    sentiment_by_topic = df_full.groupby(["topic_label", "predicted_sentiment"]).size().unstack(fill_value=0)
+    fig2, ax2 = plt.subplots(figsize=(6, 4))  # Medium size
+    sentiment_by_topic[sentiment_order].plot(kind="bar", stacked=True, color=colors, ax=ax2)
     ax2.set_ylabel("Number of Evaluations")
-    ax2.set_xlabel("Topic")
-    ax2.set_title("Sentiment Counts per Topic")
-    plt.xticks(rotation=45, ha='right')
+    ax2.set_title("Sentiment Distribution by Topic")
+    ax2.legend(title="Sentiment")
     st.pyplot(fig2)
 
 except Exception as e:
-    st.warning(f"Could not load charts: {e}")
+    st.warning(f"Unable to show charts: {e}")
+
 
 
 # Footer
