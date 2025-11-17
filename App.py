@@ -196,28 +196,51 @@ st.subheader("📊 Overall Topic & Sentiment Summary")
 try:
     df_full = pd.read_csv("./data/course_evals_with_topics_and_sentiments.csv")
 
-    # Topic distribution
-    topic_counts = df_full['topic_label'].value_counts().sort_index()
-    fig1, ax1 = plt.subplots(figsize=(6, 3))
-    sns.barplot(x=topic_counts.values, y=topic_counts.index, palette="viridis", ax=ax1)
-    ax1.set_xlabel("Number of Evaluations")
-    ax1.set_ylabel("Topic")
-    ax1.set_title("Overall Topic Distribution")
-    st.pyplot(fig1)
+    # Create two columns to keep charts smaller & centered
+    colA, colB = st.columns([1, 1])
 
-    # Sentiment distribution by topic
-    sentiment_order = ["positive", "neutral", "negative"]
-    colors = ["green", "orange", "red"]
-    sentiment_by_topic = df_full.groupby(["topic_label", "predicted_sentiment"]).size().unstack(fill_value=0)
-    fig2, ax2 = plt.subplots(figsize=(6, 4))
-    sentiment_by_topic[sentiment_order].plot(kind="bar", stacked=True, color=colors, ax=ax2)
-    ax2.set_ylabel("Number of Evaluations")
-    ax2.set_title("Sentiment Distribution by Topic")
-    ax2.legend(title="Sentiment")
-    st.pyplot(fig2)
+    with colA:
+        topic_counts = df_full['topic_label'].value_counts().sort_index()
+        fig1, ax1 = plt.subplots(figsize=(4, 2.5))   # smaller size
+        sns.barplot(
+            x=topic_counts.values,
+            y=topic_counts.index,
+            palette="viridis",
+            ax=ax1
+        )
+        ax1.set_xlabel("Count")
+        ax1.set_ylabel("Topic")
+        ax1.set_title("Topic Distribution")
+        st.pyplot(fig1, use_container_width=False)
+
+
+    with colB:
+        sentiment_order = ["positive", "neutral", "negative"]
+        colors = ["green", "orange", "red"]
+
+        sentiment_by_topic = (
+            df_full.groupby(["topic_label", "predicted_sentiment"])
+            .size()
+            .unstack(fill_value=0)[sentiment_order]
+        )
+
+        fig2, ax2 = plt.subplots(figsize=(4, 3))  # smaller chart
+        sentiment_by_topic.plot(
+            kind="bar",
+            stacked=True,
+            color=colors,
+            ax=ax2,
+            width=0.8
+        )
+
+        ax2.set_ylabel("Count")
+        ax2.set_title("Sentiment by Topic")
+        ax2.legend(title="Sentiment", prop={"size": 8})
+        st.pyplot(fig2, use_container_width=False)
 
 except Exception as e:
     st.warning(f"Unable to show charts: {e}")
+
 
 
 # Footer
