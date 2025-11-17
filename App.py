@@ -10,9 +10,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# -----------------------------
 # Page setup
-# -----------------------------
+
 st.set_page_config(
     page_title="Course Evaluation Analyzer",
     page_icon="🎓",
@@ -23,6 +22,7 @@ st.title("Student Course Evaluation Analyzer")
 st.write("Analyze topics and sentiment from student course evaluations for BBT 4106 & BBT 4206.")
 
 # NLTK setup
+
 try:
     stopwords.words('english')
 except:
@@ -32,7 +32,9 @@ except:
 stop_words = set(stopwords.words('english'))
 stemmer = PorterStemmer()
 
+
 # Load models
+
 try:
     lda_model = joblib.load('./model/topic_model_lda.pkl')
     topic_vectorizer = joblib.load('./model/topic_vectorizer.pkl')
@@ -46,6 +48,7 @@ except Exception as e:
     st.stop()
 
 # Text cleaning functions
+
 def clean_topic_text(text):
     text = re.sub(r'[^a-zA-Z\s]', '', str(text).lower())
     text = re.sub(r'\s+', ' ', text).strip()
@@ -60,6 +63,7 @@ def clean_sentiment_text(text):
     return " ".join(tokens)
 
 # Prediction functions
+
 def get_topic_prediction(text):
     try:
         cleaned = clean_topic_text(text)
@@ -97,11 +101,13 @@ def get_sentiment_prediction(text):
     except Exception as e:
         return {'error': str(e)}
 
-# Initialize session state
+# Session state initialization
+
 if "input_text" not in st.session_state:
     st.session_state["input_text"] = ""
 
 # Text area
+
 st.text_area(
     "Student Feedback:",
     value=st.session_state["input_text"],
@@ -109,33 +115,37 @@ st.text_area(
     height=150
 )
 
+# Sample button helper
+def set_sample_text(text):
+    st.session_state["input_text"] = text
+    st.experimental_rerun()
+
 # Sample buttons
 st.markdown("### Sample Inputs")
 col1, col2, col3 = st.columns(3)
 
 with col1:
     if st.button("Positive Example"):
-        st.session_state["input_text"] = "The practical sessions were very helpful and the lecturer explained things well."
-        st.experimental_rerun()
+        set_sample_text("The practical sessions were very helpful and the lecturer explained things well.")
 
 with col2:
     if st.button("Neutral Example"):
-        st.session_state["input_text"] = "The course was fine, but some topics moved too fast."
-        st.experimental_rerun()
+        set_sample_text("The course was fine, but some topics moved too fast.")
 
 with col3:
     if st.button("Negative Example"):
-        st.session_state["input_text"] = "The course was confusing and the instructions for assignments were unclear."
-        st.experimental_rerun()
+        set_sample_text("The course was confusing and the instructions for assignments were unclear.")
 
 # Analyze button
+input_text = st.session_state["input_text"]
+
 if st.button("Analyze Feedback"):
-    if not st.session_state["input_text"].strip():
+    if not input_text.strip():
         st.warning("Please enter some text to analyze.")
     else:
         with st.spinner("Analyzing..."):
-            topic_result = get_topic_prediction(st.session_state["input_text"])
-            sentiment_result = get_sentiment_prediction(st.session_state["input_text"])
+            topic_result = get_topic_prediction(input_text)
+            sentiment_result = get_sentiment_prediction(input_text)
 
             if 'error' in topic_result:
                 st.error(f"Topic Error: {topic_result['error']}")
@@ -143,7 +153,6 @@ if st.button("Analyze Feedback"):
                 st.error(f"Sentiment Error: {sentiment_result['error']}")
             else:
                 st.success("Analysis Complete")
-
                 emoji_map = {'positive': "😊", 'neutral': "😐", 'negative': "😞"}
 
                 st.markdown("## Summary")
@@ -166,15 +175,13 @@ if st.button("Analyze Feedback"):
                     st.subheader("📊 Sentiment Details")
                     for s, prob in sentiment_result['all_probabilities'].items():
                         st.progress(prob, text=f"{s.capitalize()}: {prob:.1%}")
-
 # Overall charts
 st.subheader("📊 Overall Topic & Sentiment Summary")
 
 try:
-    # Load the full dataset with topics & sentiments
     df_full = pd.read_csv("./data/course_evals_with_topics_and_sentiments.csv")
 
-    # Topic Distribution Bar Chart
+    # Topic Distribution Bar Chart (medium size)
     topic_counts = df_full['topic_label'].value_counts().sort_index()
     fig1, ax1 = plt.subplots(figsize=(6, 3))  # Medium size
     sns.barplot(x=topic_counts.values, y=topic_counts.index, palette="viridis", ax=ax1)
@@ -183,7 +190,7 @@ try:
     ax1.set_title("Overall Topic Distribution")
     st.pyplot(fig1)
 
-    # Sentiment Distribution by Topic Bar Chart
+    # Sentiment Distribution by Topic (medium size)
     sentiment_order = ["positive", "neutral", "negative"]
     colors = ["green", "orange", "red"]
     sentiment_by_topic = df_full.groupby(["topic_label", "predicted_sentiment"]).size().unstack(fill_value=0)
