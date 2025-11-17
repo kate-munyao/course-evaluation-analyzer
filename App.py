@@ -10,6 +10,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+
 # Page setup
 
 st.set_page_config(
@@ -21,6 +22,7 @@ st.set_page_config(
 st.title("Student Course Evaluation Analyzer")
 st.write("Analyze topics and sentiment from student course evaluations for BBT 4106 & BBT 4206.")
 
+
 # NLTK setup
 
 try:
@@ -31,7 +33,6 @@ except:
 
 stop_words = set(stopwords.words('english'))
 stemmer = PorterStemmer()
-
 
 # Load models
 
@@ -47,6 +48,7 @@ except Exception as e:
     st.error(f"Error loading models: {e}")
     st.stop()
 
+
 # Text cleaning functions
 
 def clean_topic_text(text):
@@ -61,6 +63,7 @@ def clean_sentiment_text(text):
     tokens = [t for t in tokens if t not in stop_words]
     tokens = [stemmer.stem(t) for t in tokens]
     return " ".join(tokens)
+
 
 # Prediction functions
 
@@ -101,10 +104,12 @@ def get_sentiment_prediction(text):
     except Exception as e:
         return {'error': str(e)}
 
+
 # Session state initialization
 
 if "input_text" not in st.session_state:
     st.session_state["input_text"] = ""
+
 
 # Text area
 
@@ -115,12 +120,15 @@ st.text_area(
     height=150
 )
 
+
 # Sample button helper
+
 def set_sample_text(text):
     st.session_state["input_text"] = text
-    st.experimental_rerun()
+
 
 # Sample buttons
+
 st.markdown("### Sample Inputs")
 col1, col2, col3 = st.columns(3)
 
@@ -136,7 +144,9 @@ with col3:
     if st.button("Negative Example"):
         set_sample_text("The course was confusing and the instructions for assignments were unclear.")
 
+
 # Analyze button
+
 input_text = st.session_state["input_text"]
 
 if st.button("Analyze Feedback"):
@@ -175,7 +185,10 @@ if st.button("Analyze Feedback"):
                     st.subheader("📊 Sentiment Details")
                     for s, prob in sentiment_result['all_probabilities'].items():
                         st.progress(prob, text=f"{s.capitalize()}: {prob:.1%}")
+
+
 # Overall charts
+
 st.subheader("📊 Overall Topic & Sentiment Summary")
 
 try:
@@ -183,7 +196,7 @@ try:
 
     # Topic Distribution Bar Chart (medium size)
     topic_counts = df_full['topic_label'].value_counts().sort_index()
-    fig1, ax1 = plt.subplots(figsize=(6, 3))  # Medium size
+    fig1, ax1 = plt.subplots(figsize=(6, 3))
     sns.barplot(x=topic_counts.values, y=topic_counts.index, palette="viridis", ax=ax1)
     ax1.set_xlabel("Number of Evaluations")
     ax1.set_ylabel("Topic")
@@ -194,7 +207,7 @@ try:
     sentiment_order = ["positive", "neutral", "negative"]
     colors = ["green", "orange", "red"]
     sentiment_by_topic = df_full.groupby(["topic_label", "predicted_sentiment"]).size().unstack(fill_value=0)
-    fig2, ax2 = plt.subplots(figsize=(6, 4))  # Medium size
+    fig2, ax2 = plt.subplots(figsize=(6, 4))
     sentiment_by_topic[sentiment_order].plot(kind="bar", stacked=True, color=colors, ax=ax2)
     ax2.set_ylabel("Number of Evaluations")
     ax2.set_title("Sentiment Distribution by Topic")
@@ -203,6 +216,7 @@ try:
 
 except Exception as e:
     st.warning(f"Unable to show charts: {e}")
+
 
 # Footer
 st.markdown("---")
