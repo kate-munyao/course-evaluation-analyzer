@@ -191,59 +191,60 @@ if st.button("Analyze Feedback"):
 
 
 # Overall charts
+# Overall charts
 st.subheader("📊 Overall Topic & Sentiment Summary")
 
 try:
     df_full = pd.read_csv("./data/course_evals_with_topics_and_sentiments.csv")
 
-    colA, colB = st.columns([1, 1])
+    # ---- TOPIC DISTRIBUTION (FIRST CHART) ----
+    topic_counts = df_full['topic_label'].value_counts().sort_index()
 
-    # ---- SMALL TOPIC DISTRIBUTION CHART ----
-    with colA:
-        topic_counts = df_full['topic_label'].value_counts().sort_index()
-        fig1, ax1 = plt.subplots(figsize=(4.5, 3.2))   # small but readable
-        sns.barplot(
-            x=topic_counts.values,
-            y=topic_counts.index,
-            palette="viridis",
-            ax=ax1
-        )
-        ax1.set_xlabel("Count", fontsize=8)
-        ax1.set_ylabel("Topic", fontsize=8)
-        ax1.set_title("Topic Distribution", fontsize=10)
-        plt.tight_layout(pad=1.5)   # extra padding to prevent overlap
-        st.pyplot(fig1, use_container_width=False)
+    fig1, ax1 = plt.subplots(figsize=(5, 3.2))  # small chart
+    sns.barplot(
+        x=topic_counts.values,
+        y=topic_counts.index,
+        palette="viridis",
+        ax=ax1
+    )
+    ax1.set_xlabel("Count", fontsize=8)
+    ax1.set_ylabel("Topic", fontsize=8)
+    ax1.set_title("Topic Distribution", fontsize=10)
+    plt.tight_layout(pad=1.5)
+    st.pyplot(fig1, use_container_width=True)
 
-    # ---- SMALL SENTIMENT BY TOPIC CHART ----
-    with colB:
-        sentiment_order = ["positive", "neutral", "negative"]
-        colors = ["green", "orange", "red"]
+    # spacing between charts
+    st.markdown("###")
 
-        sentiment_by_topic = (
-            df_full.groupby(["topic_label", "predicted_sentiment"])
-            .size()
-            .unstack(fill_value=0)[sentiment_order]
-        )
+    # ---- SENTIMENT BY TOPIC (SECOND CHART BELOW) ----
+    sentiment_order = ["positive", "neutral", "negative"]
+    colors = ["green", "orange", "red"]
 
-        fig2, ax2 = plt.subplots(figsize=(4.5, 3.2))  # small but readable
-        sentiment_by_topic.plot(
-            kind="bar",
-            stacked=True,
-            color=colors,
-            ax=ax2,
-            width=0.7
-        )
+    sentiment_by_topic = (
+        df_full.groupby(["topic_label", "predicted_sentiment"])
+        .size()
+        .unstack(fill_value=0)[sentiment_order]
+    )
 
-        ax2.set_ylabel("Count", fontsize=8)
-        ax2.set_title("Sentiment by Topic", fontsize=10)
-        ax2.legend(title="Sentiment", prop={"size": 7})
-        plt.xticks(rotation=45, ha='right', fontsize=7)
-        plt.tight_layout(pad=1.5)
-        st.pyplot(fig2, use_container_width=False)
+    fig2, ax2 = plt.subplots(figsize=(5, 3.2))  # small chart
+    sentiment_by_topic.plot(
+        kind="bar",
+        stacked=True,
+        color=colors,
+        ax=ax2,
+        width=0.7
+    )
+
+    ax2.set_ylabel("Count", fontsize=8)
+    ax2.set_title("Sentiment by Topic", fontsize=10)
+    ax2.legend(title="Sentiment", prop={"size": 7})
+    plt.xticks(rotation=45, ha='right', fontsize=7)
+    plt.tight_layout(pad=1.5)
+    st.pyplot(fig2, use_container_width=True)
 
 except Exception as e:
     st.warning(f"Unable to show charts: {e}")
-
+    
 # Footer
 st.markdown("---")
 st.markdown("### About This Project")
