@@ -1,11 +1,3 @@
-# Sentiment Analysis for Course Evaluations
-# Unit: BBT 4206 - Business Intelligence II
-
-# This script takes the cleaned course evaluation data (with topics already added),
-# processes the text, trains several ML models, compares them, picks the best one,
-# and then predicts sentiment for all the evaluations. 
-# The output includes graphs, word clouds, and saved models.
-
 import pandas as pd
 import numpy as np
 import re
@@ -28,7 +20,9 @@ from sklearn.metrics import classification_report, confusion_matrix
 
 from wordcloud import WordCloud
 
-# Make sure NLTK resources exist
+# -----------------------------------------------------------
+# Setup NLTK resources
+# -----------------------------------------------------------
 try:
     stopwords.words("english")
 except:
@@ -49,7 +43,7 @@ print(f"Loaded {len(df)} rows")
 print("Sentiment breakdown:", df["sentiment"].value_counts().to_dict())
 
 # -----------------------------------------------------------
-# 2. Text preprocessing (light cleaning for sentiment)
+# 2. Preprocess text (clean for sentiment)
 # -----------------------------------------------------------
 print("\nStep 2: Cleaning text...")
 
@@ -57,6 +51,8 @@ stop_words = set(stopwords.words("english"))
 stemmer = PorterStemmer()
 
 def clean_text_for_sentiment(text):
+    if pd.isna(text):
+        return ""
     text = text.lower()
     text = re.sub(r"[^a-zA-Z\s]", "", text)
     tokens = nltk.word_tokenize(text)
@@ -64,32 +60,29 @@ def clean_text_for_sentiment(text):
     tokens = [stemmer.stem(w) for w in tokens]
     return " ".join(tokens)
 
-df["clean_text_sa"] = df["clean_text"].apply(clean_text_for_sentiment)
-print("Finished preprocessing")
+# Always use the raw text column
+df["clean_text_sa"] = df["text"].apply(clean_text_for_sentiment)
+print("Finished preprocessing.")
 
 # -----------------------------------------------------------
-# 3. TF-IDF feature extraction
+# 3. TF-IDF vectorizer
 # -----------------------------------------------------------
 print("\nStep 3: Building TF-IDF features...")
 
 tfidf = TfidfVectorizer(max_features=1000, ngram_range=(1, 2))
-
 X = tfidf.fit_transform(df["clean_text_sa"])
 y = df["sentiment"]
 
 print("Feature matrix:", X.shape)
-print("Vocabulary size:", len(tfidf.get_feature_names_out()))
+print("TF-IDF vocabulary size:", len(tfidf.get_feature_names_out()))
 
 # Train/test split
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, stratify=y, random_state=42
 )
 
-print("Train size:", X_train.shape[0])
-print("Test size:", X_test.shape[0])
-
 # -----------------------------------------------------------
-# 4. Train several models + cross-validation
+# 4. Train models + cross-validation
 # -----------------------------------------------------------
 print("\nStep 4: Training models...")
 
@@ -130,7 +123,7 @@ print("\nCross-validation results:")
 print(results_df.round(4))
 
 # -----------------------------------------------------------
-# 5. Pick best model + evaluate
+# 5. Select best model
 # -----------------------------------------------------------
 print("\nStep 5: Selecting best model...")
 
@@ -142,12 +135,13 @@ best_model.fit(X_train, y_train)
 print("Best model:", best_model_name)
 print("F1-Score:", results_df.loc[best_model_name, "F1-Score"])
 
+# Evaluate
 y_pred = best_model.predict(X_test)
 
 print("\nClassification Report:")
 print(classification_report(y_test, y_pred))
 
-# Confusion matrix graph
+# Confusion matrix
 plt.figure(figsize=(8, 6))
 cm = confusion_matrix(y_test, y_pred, labels=["positive", "neutral", "negative"])
 sns.heatmap(
@@ -164,7 +158,7 @@ plt.savefig("./model/confusion_matrix.png", dpi=150)
 plt.close()
 
 # -----------------------------------------------------------
-# 6. Predict all evaluations
+# 6. Predict full dataset
 # -----------------------------------------------------------
 print("\nStep 6: Predicting sentiment for full dataset...")
 
@@ -216,8 +210,11 @@ print("Saved:")
 print(" - sentiment_classifier.pkl")
 print(" - topic_vectorizer_using_tfidf.pkl")
 
+# -----------------------------------------------------------
 # Word clouds
+# -----------------------------------------------------------
 print("\nGenerating word clouds...")
+
 fig, axes = plt.subplots(1, 3, figsize=(18, 6))
 
 for i, sentiment in enumerate(["positive", "neutral", "negative"]):
