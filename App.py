@@ -190,11 +190,8 @@ plt.tight_layout()
 plt.savefig("./model/confusion_matrix.png")
 plt.close()
 
-
-
-# -----------------------------------------------------
 # Save Model Outputs
-# -----------------------------------------------------
+
 print("\nStep 6: Saving model & vectorizer...")
 
 joblib.dump(best_model, "./model/sentiment_classifier.pkl")
