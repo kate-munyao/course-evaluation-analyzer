@@ -1,190 +1,146 @@
+"""
+Simple Sentiment Analysis for Course Evaluations
+BBT 4206 - Business Intelligence II
+"""
+
 import pandas as pd
 import numpy as np
 import re
 import joblib
 import matplotlib.pyplot as plt
-import seaborn as sns
 import nltk
 from nltk.corpus import stopwords
-
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split, RepeatedStratifiedKFold, cross_validate
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report, accuracy_score
 
-
-# NLTK Setup
+# Download NLTK data
 try:
-    stopwords.words("english")
+    stopwords.words('english')
 except:
-    nltk.download("stopwords")
-    nltk.download("punkt")
-
+    nltk.download('stopwords')
+    nltk.download('punkt')
+    nltk.download('punkt_tab')
 
 print("="*70)
-print(" FIXED SENTIMENT MODEL TRAINING SCRIPT")
+print("SENTIMENT ANALYSIS - COURSE EVALUATIONS")
 print("="*70)
 
-# Load Dataset
+# Load data
+print("\n[1/6] Loading data...")
+df = pd.read_csv('./data/course_evals_with_topics.csv')
+print(f"✅ Loaded {len(df)} evaluations")
+print(f"Sentiment distribution:\n{df['sentiment'].value_counts()}\n")
 
-print("\nStep 1: Loading dataset...")
-df = pd.read_csv("./data/course_evals_with_topics.csv")
-print(f"Loaded {len(df)} rows")
-print("Sentiment distribution:", df["sentiment"].value_counts().to_dict())
-
-# TWO CLEANING FUNCTIONS
-
-# (A) Aggressive cleaner for Topic Modeling
-def clean_for_topic(text):
-    if pd.isna(text):
-        return ""
-
-    text = text.lower()
-    text = re.sub(r"[^a-zA-Z\s]", " ", text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
-
-
-# (B) Light cleaner for Sentiment (keeps NOT / NO / NEVER)
-sent_stopwords = set(stopwords.words("english")) - {"not", "no", "never"}
+# Clean text for sentiment
+print("\n[2/6] Cleaning text for sentiment analysis...")
+stop_words = set(stopwords.words('english'))
 
 def clean_for_sentiment(text):
-    if pd.isna(text):
-        return ""
-
     text = text.lower()
-    text = re.sub(r"[^a-zA-Z'\s]", " ", text)
+    text = re.sub(r'[^a-zA-Z\s]', '', text)
+    words = text.split()
+    words = [w for w in words if w not in stop_words and len(w) > 2]
+    return ' '.join(words)
 
-    tokens = nltk.word_tokenize(text)
-    tokens = [t for t in tokens if t not in sent_stopwords]
+df['clean_text_sa'] = df['clean_text'].apply(clean_for_sentiment)
+print("✅ Text cleaned")
 
-    return " ".join(tokens)
-
-
-
-# Sentiment Cleaning Only
-
-print("\nStep 2: Cleaning text (sentiment only)...")
-df["clean_text"] = df["text"].apply(clean_for_sentiment)
-
-
-
-# TF-IDF Vectorizer (sentiment only)
-
-print("\nStep 3: Building TF-IDF features...")
-
+# Create TF-IDF features
+print("\n[3/6] Creating TF-IDF features...")
 tfidf = TfidfVectorizer(
-    ngram_range=(1, 2),
-    min_df=1,
-    max_df=0.98
+    max_features=1000,
+    ngram_range=(1, 2)
 )
 
-X = tfidf.fit_transform(df["clean_text"])
-y = df["sentiment"]
-
-print("Feature matrix:", X.shape)
-print("Vocabulary size:", len(tfidf.get_feature_names_out()))
-
-# Train/Test Split
+X = tfidf.fit_transform(df['clean_text_sa'])
+y = df['sentiment']
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, stratify=y, random_state=42
+    X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-# Train Models + Cross Validation
+print(f"✅ Features created: {X.shape}")
+print(f"Training: {X_train.shape[0]} | Testing: {X_test.shape[0]}")
 
-print("\nStep 4: Training models...")
-
+# Train models
+print("\n[4/6] Training models...")
 models = {
-    "Logistic Regression": LogisticRegression(
-        max_iter=2000,
-        multi_class="multinomial",
-        solver="lbfgs",
-        class_weight="balanced",     # FIXED FOR NEUTRAL BIAS
-        random_state=42
-    ),
-    "Naive Bayes": MultinomialNB(),
-    "Decision Tree": DecisionTreeClassifier(max_depth=6, random_state=42),
-    "Random Forest": RandomForestClassifier(
-        n_estimators=150,
-        max_depth=8,
-        n_jobs=-1,
-        random_state=42
-    )
+    "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
+    "Naive Bayes": MultinomialNB()
 }
 
-scoring = ["accuracy", "precision_weighted", "recall_weighted", "f1_weighted"]
-cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=2, random_state=42)
-
 results = {}
-
 for name, model in models.items():
-    print(f"Running CV for: {name}")
+    scores = cross_val_score(model, X, y, cv=5, scoring='accuracy')
+    results[name] = scores.mean()
+    print(f"  {name}: {scores.mean():.3f} accuracy")
 
-    scores = cross_validate(model, X, y, scoring=scoring, cv=cv, n_jobs=-1)
-
-    results[name] = {
-        "Accuracy": scores["test_accuracy"].mean(),
-        "Precision": scores["test_precision_weighted"].mean(),
-        "Recall": scores["test_recall_weighted"].mean(),
-        "F1": scores["test_f1_weighted"].mean()
-    }
-
-results_df = pd.DataFrame(results).T.sort_values("F1", ascending=False)
-print("\nCross-validation results:")
-print(results_df.round(4))
-
-# Select Best Model
-print("\nStep 5: Selecting best model...")
-
-best_name = results_df.index[0]
-best_model = models[best_name]
-
+# Pick best model
+best_model_name = max(results, key=results.get)
+best_model = models[best_model_name]
 best_model.fit(X_train, y_train)
 
-print(f"Best Model: {best_name}")
+print(f"\n✅ Best model: {best_model_name} ({results[best_model_name]:.3f})")
 
-
-
-# -----------------------------------------------------
-# Evaluate Performance
-# -----------------------------------------------------
+# Evaluate
 y_pred = best_model.predict(X_test)
-print("\nClassification Report:")
+print("\n" + "="*70)
+print("CLASSIFICATION REPORT:")
+print("="*70)
 print(classification_report(y_test, y_pred))
 
-cm = confusion_matrix(y_test, y_pred, labels=["positive", "neutral", "negative"])
-plt.figure(figsize=(8, 6))
-sns.heatmap(
-    cm,
-    annot=True,
-    fmt="d",
-    cmap="Blues",
-    xticklabels=["Positive", "Neutral", "Negative"],
-    yticklabels=["Positive", "Neutral", "Negative"]
-)
+# Predict for all data
+print("\n[5/6] Predicting sentiments for all evaluations...")
+df['predicted_sentiment'] = best_model.predict(X)
+df['prediction_confidence'] = best_model.predict_proba(X).max(axis=1)
+
+# Create sentiment by topic chart
+print("\n[6/6] Creating charts...")
+sentiment_by_topic = df.groupby(['topic_label', 'predicted_sentiment']).size().unstack(fill_value=0)
+
+# Make sure we have all sentiment columns
+for sent in ['positive', 'neutral', 'negative']:
+    if sent not in sentiment_by_topic.columns:
+        sentiment_by_topic[sent] = 0
+
+sentiment_by_topic = sentiment_by_topic[['positive', 'neutral', 'negative']]
+
+# Plot
+fig, ax = plt.subplots(figsize=(12, 6))
+
+x = np.arange(len(sentiment_by_topic.index))
+width = 0.25
+
+ax.bar(x - width, sentiment_by_topic['positive'], width, label='Positive', color='green')
+ax.bar(x, sentiment_by_topic['neutral'], width, label='Neutral', color='orange')
+ax.bar(x + width, sentiment_by_topic['negative'], width, label='Negative', color='red')
+
+ax.set_xlabel('Topic', fontsize=12, fontweight='bold')
+ax.set_ylabel('Count', fontsize=12, fontweight='bold')
+ax.set_title('Sentiment Distribution by Topic', fontsize=14, fontweight='bold')
+ax.set_xticks(x)
+ax.set_xticklabels(sentiment_by_topic.index, rotation=45, ha='right')
+ax.legend()
+
 plt.tight_layout()
-plt.savefig("./model/confusion_matrix.png")
+plt.savefig('./model/sentiment_by_topic.png', dpi=150, bbox_inches='tight')
+print("✅ Chart saved: ./model/sentiment_by_topic.png")
 plt.close()
 
+# Save everything
+print("\n[SAVING] Saving models and data...")
+df.to_csv('./data/course_evals_with_topics_and_sentiments.csv', index=False)
+joblib.dump(best_model, './model/sentiment_classifier.pkl')
+joblib.dump(tfidf, './model/sentiment_vectorizer.pkl')
 
-
-# -----------------------------------------------------
-# Save Model Outputs
-# -----------------------------------------------------
-print("\nStep 6: Saving model & vectorizer...")
-
-joblib.dump(best_model, "./model/sentiment_classifier.pkl")
-joblib.dump(tfidf, "./model/sentiment_vectorizer.pkl")
-
-df.to_csv("./data/course_evals_with_topics_and_sentiments.csv", index=False)
-
-print("Saved:")
-print(" - sentiment_classifier.pkl")
-print(" - sentiment_vectorizer.pkl")
-
-print("\nAll tasks completed successfully!")
+print("✅ All files saved!")
+print("\n" + "="*70)
+print("SENTIMENT ANALYSIS COMPLETE!")
 print("="*70)
+print(f"\nSummary:")
+print(f"  Positive: {(df['predicted_sentiment'] == 'positive').sum()}")
+print(f"  Neutral: {(df['predicted_sentiment'] == 'neutral').sum()}")
+print(f"  Negative: {(df['predicted_sentiment'] == 'negative').sum()}")
