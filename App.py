@@ -35,11 +35,14 @@ stop_words = set(stopwords.words('english'))
 stemmer = PorterStemmer()
 
 # Load models
+# Load models
 try:
     lda_model = joblib.load('./model/topic_model_lda.pkl')
     topic_vectorizer = joblib.load('./model/topic_vectorizer.pkl')
+
+    # CORRECT SENTIMENT FILES
     sentiment_model = joblib.load('./model/sentiment_classifier.pkl')
-    sentiment_vectorizer = joblib.load('./model/topic_vectorizer_using_tfidf.pkl')
+    sentiment_vectorizer = joblib.load('./model/sentiment_vectorizer.pkl')
 
     with open('./model/topic_labels.json', 'r', encoding='utf-8') as f:
         topic_labels = json.load(f)
@@ -48,6 +51,7 @@ try:
 except Exception as e:
     st.error(f"Error loading models: {e}")
     st.stop()
+
 
 
 # Cleaning functions
