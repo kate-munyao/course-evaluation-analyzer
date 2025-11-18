@@ -8,6 +8,7 @@ import textwrap
 
 import nltk
 from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split, RepeatedStratifiedKFold, cross_validate
@@ -20,9 +21,9 @@ from sklearn.metrics import classification_report, confusion_matrix
 from wordcloud import WordCloud
 
 
-# -----------------------------------------------------------
-# Setup NLTK resources
-# -----------------------------------------------------------
+# =====================================================
+# SETUP NLTK
+# =====================================================
 try:
     stopwords.words("english")
 except:
@@ -32,87 +33,82 @@ except:
 
 
 print("="*70)
-print("SENTIMENT ANALYSIS FOR COURSE EVALUATIONS")
+print(" SENTIMENT ANALYSIS FOR COURSE EVALUATIONS")
 print("="*70)
 
 
-# -----------------------------------------------------------
-# Step 1: Load dataset
-# -----------------------------------------------------------
-print("\nStep 1: Loading data...")
+# =====================================================
+# LOAD DATA
+# =====================================================
+print("\nStep 1: Loading dataset...")
 df = pd.read_csv("./data/course_evals_with_topics.csv")
 print(f"Loaded {len(df)} rows")
+
 print("Sentiment breakdown:", df["sentiment"].value_counts().to_dict())
 
 
-# -----------------------------------------------------------
-# Step 2: Text Cleaning (Improved)
-# -----------------------------------------------------------
+# =====================================================
+# CLEAN TEXT (UNIFIED FUNCTION)
+# =====================================================
 print("\nStep 2: Cleaning text...")
 
-# KEEP important negative indicators
-important_words = {
-    "not", "no", "never", "bad", "poor", "terrible",
-    "waste", "unclear", "confusing", "hard", "difficult"
-}
+stop_words = set(stopwords.words("english")) - {"not", "no", "never"}
 
-stop_words = set(stopwords.words("english")) - important_words
-
-def clean_text_for_sentiment(text):
+def clean_text(text):
     if pd.isna(text):
         return ""
     text = text.lower()
-    text = re.sub(r"[^a-zA-Z0-9\s]", " ", text)
+    text = re.sub(r"[^a-zA-Z\s]", " ", text)
     tokens = nltk.word_tokenize(text)
     tokens = [w for w in tokens if w not in stop_words]
     return " ".join(tokens)
 
-df["clean_sentiment_text"] = df["text"].apply(clean_text_for_sentiment)
-print("Finished preprocessing.")
+df["clean_text"] = df["text"].apply(clean_text)
 
 
-# -----------------------------------------------------------
-# Step 3: TF-IDF Vectorization (Improved)
-# -----------------------------------------------------------
+# =====================================================
+# TF-IDF VECTORIZATION
+# =====================================================
 print("\nStep 3: Building TF-IDF features...")
 
 tfidf = TfidfVectorizer(
     ngram_range=(1, 2),
     min_df=2,
-    max_df=0.95,
+    max_df=0.95
 )
 
-X = tfidf.fit_transform(df["clean_sentiment_text"])
+X = tfidf.fit_transform(df["clean_text"])
 y = df["sentiment"]
 
 print("Feature matrix:", X.shape)
-print("TF-IDF vocabulary size:", len(tfidf.get_feature_names_out()))
+print("Vocabulary size:", len(tfidf.get_feature_names_out()))
 
 
-# Train/test split
+# =====================================================
+# TRAIN / TEST SPLIT
+# =====================================================
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, stratify=y, random_state=42
 )
 
 
-# -----------------------------------------------------------
-# Step 4: Train Models + Cross Validation (Balanced)
-# -----------------------------------------------------------
+# =====================================================
+# TRAIN MODELS WITH CROSS-VALIDATION
+# =====================================================
 print("\nStep 4: Training models...")
 
 models = {
     "Logistic Regression": LogisticRegression(
+        max_iter=1000,
         multi_class="multinomial",
         solver="lbfgs",
-        max_iter=2000,
-        class_weight="balanced",   # ★ MAKES NEGATIVE MUCH MORE ACCURATE
         random_state=53
     ),
     "Naive Bayes": MultinomialNB(),
     "Decision Tree": DecisionTreeClassifier(max_depth=5, random_state=53),
     "Random Forest": RandomForestClassifier(
-        n_estimators=150,
-        max_depth=6,
+        n_estimators=100,
+        max_depth=5,
         random_state=53,
         n_jobs=-1
     )
@@ -126,21 +122,22 @@ cv_results = {}
 for name, model in models.items():
     print(f"Running CV for: {name}")
     scores = cross_validate(model, X, y, scoring=scoring, cv=cv, n_jobs=-1)
+
     cv_results[name] = {
         "Accuracy": scores["test_accuracy"].mean(),
         "Precision": scores["test_precision_weighted"].mean(),
         "Recall": scores["test_recall_weighted"].mean(),
-        "F1-Score": scores["test_f1_weighted"].mean(),
+        "F1": scores["test_f1_weighted"].mean(),
     }
 
-results_df = pd.DataFrame(cv_results).T.sort_values("F1-Score", ascending=False)
+results_df = pd.DataFrame(cv_results).T.sort_values("F1", ascending=False)
 print("\nCross-validation results:")
 print(results_df.round(4))
 
 
-# -----------------------------------------------------------
-# Step 5: Select & Train Best Model
-# -----------------------------------------------------------
+# =====================================================
+# SELECT BEST MODEL
+# =====================================================
 print("\nStep 5: Selecting best model...")
 
 best_model_name = results_df.index[0]
@@ -149,8 +146,9 @@ best_model = models[best_model_name]
 best_model.fit(X_train, y_train)
 
 print("Best model:", best_model_name)
-print("F1-Score:", results_df.loc[best_model_name, "F1-Score"])
 
+
+# Evaluate
 y_pred = best_model.predict(X_test)
 print("\nClassification Report:")
 print(classification_report(y_test, y_pred))
@@ -159,89 +157,36 @@ print(classification_report(y_test, y_pred))
 # Confusion Matrix
 plt.figure(figsize=(8, 6))
 cm = confusion_matrix(y_test, y_pred, labels=["positive", "neutral", "negative"])
-sns.heatmap(
-    cm, annot=True, fmt="d", cmap="Blues",
-    xticklabels=["Positive", "Neutral", "Negative"],
-    yticklabels=["Positive", "Neutral", "Negative"]
-)
-plt.title(f"Confusion Matrix - {best_model_name}")
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+            xticklabels=["Positive", "Neutral", "Negative"],
+            yticklabels=["Positive", "Neutral", "Negative"])
 plt.tight_layout()
-plt.savefig("./model/confusion_matrix.png", dpi=150)
+plt.savefig("./model/confusion_matrix.png")
 plt.close()
 
 
-# -----------------------------------------------------------
-# Step 6: Predict Entire Dataset
-# -----------------------------------------------------------
-print("\nStep 6: Predicting sentiment for full dataset...")
+# =====================================================
+# PREDICT ALL DATA
+# =====================================================
+print("\nStep 6: Predicting all data...")
 
 df["predicted_sentiment"] = best_model.predict(X)
-df["prediction_confidence"] = best_model.predict_proba(X).max(axis=1)
+df["confidence"] = best_model.predict_proba(X).max(axis=1)
 
 
-# -----------------------------------------------------------
-# Step 7: Sentiment per Topic
-# -----------------------------------------------------------
-print("\nStep 7: Analysing sentiment per topic...")
-
-sentiment_by_topic = df.groupby(
-    ["topic_label", "predicted_sentiment"]
-).size().unstack(fill_value=0)
-
-sentiment_order = ["positive", "neutral", "negative"]
-colors = ["green", "orange", "red"]
-
-ax = sentiment_by_topic[sentiment_order].plot(
-    kind="bar",
-    figsize=(12, 6),
-    color=colors,
-    edgecolor="black"
-)
-
-ax.set_xticklabels(
-    ['\n'.join(textwrap.wrap(label, 15)) for label in sentiment_by_topic.index],
-    rotation=45,
-    ha="right"
-)
-
-plt.title("Sentiment Distribution by Topic")
-plt.tight_layout()
-plt.savefig("./model/sentiment_by_topic.png", dpi=150)
-plt.close()
-
-
-# -----------------------------------------------------------
-# Step 8: Save Models
-# -----------------------------------------------------------
-print("\nStep 8: Saving output...")
+# =====================================================
+# SAVE OUTPUT
+# =====================================================
+print("\nStep 7: Saving model + vectorizer...")
 
 df.to_csv("./data/course_evals_with_topics_and_sentiments.csv", index=False)
+
 joblib.dump(best_model, "./model/sentiment_classifier.pkl")
-joblib.dump(tfidf, "./model/sentiment_tfidf.pkl")
+joblib.dump(tfidf, "./model/sentiment_vectorizer.pkl")
 
 print("Saved:")
-print(" - sentiment_classifier.pkl")
-print(" - sentiment_tfidf.pkl")
+print("  - sentiment_classifier.pkl")
+print("  - sentiment_vectorizer.pkl")
 
-
-# -----------------------------------------------------------
-# Word Clouds
-# -----------------------------------------------------------
-print("\nGenerating word clouds...")
-
-fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-
-for i, sentiment in enumerate(["positive", "neutral", "negative"]):
-    text = " ".join(df[df["predicted_sentiment"] == sentiment]["text"])
-    if text.strip():
-        wc = WordCloud(background_color="white", max_words=60).generate(text)
-        axes[i].imshow(wc, interpolation="bilinear")
-        axes[i].set_title(f"{sentiment.capitalize()} Reviews")
-        axes[i].axis("off")
-
-plt.tight_layout()
-plt.savefig("./model/sentiment_wordclouds.png", dpi=150)
-plt.close()
-
-print("\nAll tasks completed successfully.")
+print("\nAll tasks complete!")
 print("="*70)
