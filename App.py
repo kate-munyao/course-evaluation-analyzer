@@ -1,5 +1,5 @@
 """
-Course Evaluation Analyzer - Streamlit App
+Course Evaluation Analyzer - STREAMLIT APP (FIXED VERSION)
 BBT 4206 - Business Intelligence II
 """
 
@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from pathlib import Path
 
 # Page config
 st.set_page_config(
@@ -36,22 +35,22 @@ def load_models():
         return lda, topic_vec, sentiment_model, sentiment_vec, labels
     except Exception as e:
         st.error(f"Error loading models: {e}")
+        st.info("Please run training scripts first!")
         st.stop()
 
 lda, topic_vec, sentiment_model, sentiment_vec, topic_labels = load_models()
 
-# Load results data for charts
+# Load results
 @st.cache_data
 def load_results():
     try:
-        df = pd.read_csv('./data/course_evals_with_topics_and_sentiments.csv')
-        return df
+        return pd.read_csv('./data/course_evals_with_topics_and_sentiments.csv')
     except:
         return None
 
 results_df = load_results()
 
-# Text cleaning functions
+# Cleaning functions
 def clean_for_topic(text):
     text = re.sub(r'[^a-zA-Z\s]', '', str(text).lower())
     text = re.sub(r'\s+', ' ', text).strip()
@@ -61,15 +60,11 @@ def clean_for_sentiment(text):
     text = text.lower()
     text = re.sub(r'[^a-zA-Z\s]', '', text)
     words = text.split()
-    # Simple stopwords
-    stop = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
-            'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
-            'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should',
-            'could', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those'}
+    stop = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for'}
     words = [w for w in words if w not in stop and len(w) > 2]
     return ' '.join(words)
 
-# Prediction functions
+# Predictions
 def predict_topic(text):
     cleaned = clean_for_topic(text)
     X = topic_vec.transform([cleaned])
@@ -85,7 +80,8 @@ def predict_topic(text):
         'topic_label': topic_labels.get(topic_id, f'Topic {topic_id}'),
         'confidence': float(probs[topic_id]),
         'top_words': top_words,
-        'all_probs': {topic_labels.get(i, f'Topic {i}'): float(p) for i, p in enumerate(probs)}
+        'all_probs': {topic_labels.get(i, f'Topic {i}'): float(p) 
+                     for i, p in enumerate(probs)}
     }
 
 def predict_sentiment(text):
@@ -97,15 +93,15 @@ def predict_sentiment(text):
     return {
         'sentiment': pred,
         'confidence': float(probs.max()),
-        'all_probs': {s: float(p) for s, p in zip(sentiment_model.classes_, probs)}
+        'all_probs': {s: float(p) for s, p in 
+                     zip(sentiment_model.classes_, probs)}
     }
 
-# Title and intro
+# Title
 st.title("🎓 Course Evaluation Analyzer")
 st.markdown("""
-### NLP-Powered Analysis for Business Intelligence Courses
-
-Automatically analyze student course evaluations using **Topic Modeling** and **Sentiment Analysis**.
+### NLP-Powered Analysis for BI Courses
+Automatically analyze student feedback using **Topic Modeling** and **Sentiment Analysis**.
 """)
 
 # Sidebar with charts
@@ -128,51 +124,63 @@ if results_df is not None:
         
         # Sentiment by topic
         st.subheader("Sentiment by Topic")
-        sentiment_by_topic = results_df.groupby(['topic_label', 'predicted_sentiment']).size().unstack(fill_value=0)
+        sentiment_by_topic = results_df.groupby(
+            ['topic_label', 'predicted_sentiment']
+        ).size().unstack(fill_value=0)
         
-        # Ensure all sentiment columns exist
         for sent in ['positive', 'neutral', 'negative']:
             if sent not in sentiment_by_topic.columns:
                 sentiment_by_topic[sent] = 0
         
         fig2 = go.Figure()
-        fig2.add_trace(go.Bar(name='Positive', x=sentiment_by_topic.index, 
-                              y=sentiment_by_topic['positive'], marker_color='green'))
-        fig2.add_trace(go.Bar(name='Neutral', x=sentiment_by_topic.index, 
-                              y=sentiment_by_topic['neutral'], marker_color='orange'))
-        fig2.add_trace(go.Bar(name='Negative', x=sentiment_by_topic.index, 
-                              y=sentiment_by_topic['negative'], marker_color='red'))
+        fig2.add_trace(go.Bar(
+            name='Positive', 
+            x=sentiment_by_topic.index, 
+            y=sentiment_by_topic['positive'], 
+            marker_color='green'
+        ))
+        fig2.add_trace(go.Bar(
+            name='Neutral', 
+            x=sentiment_by_topic.index, 
+            y=sentiment_by_topic['neutral'], 
+            marker_color='orange'
+        ))
+        fig2.add_trace(go.Bar(
+            name='Negative', 
+            x=sentiment_by_topic.index, 
+            y=sentiment_by_topic['negative'], 
+            marker_color='red'
+        ))
         
-        fig2.update_layout(barmode='group', height=400, showlegend=True)
+        fig2.update_layout(barmode='group', height=400)
         st.plotly_chart(fig2, use_container_width=True)
 
-# Main content
+# Main area
 st.markdown("---")
 st.subheader("📝 Analyze Student Feedback")
 
-# Input area
 input_text = st.text_area(
     "Enter course evaluation text:",
     height=120,
-    placeholder="Example: The hands-on labs were excellent and helped me understand the concepts..."
+    placeholder="Example: The labs were great and helped me learn..."
 )
 
 # Example buttons
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    if st.button("✅ Positive Example"):
-        input_text = "The hands-on labs were excellent and really helped me understand the concepts. The instructor explained things clearly."
+    if st.button("✅ Positive"):
+        input_text = "The hands-on labs were excellent and helped me understand concepts clearly."
         st.rerun()
 
 with col2:
-    if st.button("😐 Neutral Example"):
-        input_text = "The course covered the required topics. Some parts were interesting."
+    if st.button("😐 Neutral"):
+        input_text = "The course covered required topics. Some parts were interesting."
         st.rerun()
 
 with col3:
-    if st.button("❌ Negative Example"):
-        input_text = "The lecture materials were confusing and poorly organized. Not enough examples provided."
+    if st.button("❌ Negative"):
+        input_text = "The course was bad and poorly organized. Materials were confusing."
         st.rerun()
 
 with col4:
@@ -180,62 +188,64 @@ with col4:
         input_text = ""
         st.rerun()
 
-# Analyze button
+# Analyze
 if st.button("🔍 Analyze Feedback", type="primary"):
     if not input_text or input_text.strip() == "":
-        st.warning("Please enter some text to analyze.")
+        st.warning("Please enter text to analyze.")
     else:
         with st.spinner("Analyzing..."):
-            # Get predictions
             topic_result = predict_topic(input_text)
             sentiment_result = predict_sentiment(input_text)
             
-            # Display results
             st.success("✅ Analysis Complete!")
             
-            # Summary
             sentiment_emoji = {
                 'positive': '😊',
                 'negative': '😞',
                 'neutral': '😐'
             }
             
+            # Summary
             st.markdown("## 📋 Summary")
             col1, col2 = st.columns(2)
             
             with col1:
                 st.metric(
-                    label="Topic",
-                    value=topic_result['topic_label'],
-                    delta=f"{topic_result['confidence']:.1%} confidence"
+                    "Topic",
+                    topic_result['topic_label'],
+                    f"{topic_result['confidence']:.1%} confidence"
                 )
             
             with col2:
                 st.metric(
-                    label="Sentiment",
-                    value=f"{sentiment_result['sentiment'].capitalize()} {sentiment_emoji[sentiment_result['sentiment']]}",
-                    delta=f"{sentiment_result['confidence']:.1%} confidence"
+                    "Sentiment",
+                    f"{sentiment_result['sentiment'].capitalize()} {sentiment_emoji[sentiment_result['sentiment']]}",
+                    f"{sentiment_result['confidence']:.1%} confidence"
                 )
             
             st.markdown("---")
             
-            # Detailed results
+            # Details
             col1, col2 = st.columns(2)
             
             with col1:
                 st.markdown("### 📊 Topic Analysis")
-                st.markdown(f"**Identified Topic:** {topic_result['topic_label']}")
+                st.markdown(f"**Topic:** {topic_result['topic_label']}")
                 st.markdown(f"**Confidence:** {topic_result['confidence']:.1%}")
                 st.markdown("**Key Words:**")
                 st.write(", ".join(topic_result['top_words'][:8]))
                 
                 st.markdown("**Topic Probabilities:**")
-                for topic, prob in sorted(topic_result['all_probs'].items(), key=lambda x: x[1], reverse=True):
+                for topic, prob in sorted(
+                    topic_result['all_probs'].items(), 
+                    key=lambda x: x[1], 
+                    reverse=True
+                ):
                     st.progress(prob, text=f"{topic}: {prob:.1%}")
             
             with col2:
                 st.markdown("### 💭 Sentiment Analysis")
-                st.markdown(f"**Detected Sentiment:** {sentiment_result['sentiment'].capitalize()} {sentiment_emoji[sentiment_result['sentiment']]}")
+                st.markdown(f"**Sentiment:** {sentiment_result['sentiment'].capitalize()} {sentiment_emoji[sentiment_result['sentiment']]}")
                 st.markdown(f"**Confidence:** {sentiment_result['confidence']:.1%}")
                 
                 st.markdown("**Sentiment Probabilities:**")
@@ -250,11 +260,10 @@ st.markdown("---")
 st.markdown("""
 ## 📖 About
 
-This tool uses:
-- **Topic Modeling (LDA)** to identify themes in course evaluations
-- **Machine Learning Classification** to determine sentiment
+**Topic Modeling:** Uses LDA to identify themes in evaluations  
+**Sentiment Analysis:** Uses ML to classify feedback tone
 
-**Developed for:** BBT 4106 & BBT 4206 - Business Intelligence  
+**Course:** BBT 4106 & BBT 4206 - Business Intelligence  
 **Institution:** Strathmore University  
 **Academic Year:** 2024/2025
 """)
