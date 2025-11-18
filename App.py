@@ -21,11 +21,15 @@ st.title("Student Course Evaluation Analyzer")
 st.write("Analyze topics and sentiment from student course evaluations for BBT 4106 & BBT 4206.")
 
 # NLTK setup
-try:
-    stopwords.words('english')
-except:
-    nltk.download('stopwords')
-    nltk.download('punkt')
+import os
+os.makedirs("nltk_data", exist_ok=True)
+nltk.data.path.append("nltk_data")
+
+for res in ["stopwords", "punkt", "punkt_tab"]:
+    try:
+        nltk.data.find(res)
+    except LookupError:
+        nltk.download(res, download_dir="nltk_data")
 
 stop_words = set(stopwords.words('english'))
 stemmer = PorterStemmer()
