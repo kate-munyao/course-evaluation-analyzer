@@ -1,207 +1,264 @@
-import pandas as pd
-import numpy as np
-import re
+import streamlit as st
 import joblib
-import matplotlib.pyplot as plt
-import seaborn as sns
+import json
+import re
+import numpy as np
 import nltk
 from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import train_test_split, RepeatedStratifiedKFold, cross_validate
-from sklearn.linear_model import LogisticRegression
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, confusion_matrix
+# -------------------------------------------------
+# FIX: NLTK SETUP FOR STREAMLIT CLOUD
+# -------------------------------------------------
+NLTK_PATH = os.path.join(os.getcwd(), "nltk_data")
+os.makedirs(NLTK_PATH, exist_ok=True)
+nltk.data.path = [NLTK_PATH]
 
+for pkg in ["punkt", "punkt_tab", "stopwords"]:
+    try:
+        nltk.data.find(pkg)
+    except LookupError:
+        nltk.download(pkg, download_dir=NLTK_PATH)
 
-# -----------------------------------------------------
-# NLTK Setup
-# -----------------------------------------------------
+# Load stopwords AFTER download
+stop_words = set(stopwords.words("english"))
+stemmer = PorterStemmer()
+
+# -------------------------------------------------
+# PAGE SETUP
+# -------------------------------------------------
+st.set_page_config(
+    page_title="Course Evaluation Analyzer",
+    page_icon="🎓",
+    layout="wide"
+)
+
+st.title("Student Course Evaluation Analyzer")
+st.write("Analyze topics and sentiment from student course evaluations for BBT 4106 & BBT 4206.")
+
+# -------------------------------------------------
+# LOAD MODELS
+# -------------------------------------------------
 try:
-    stopwords.words("english")
-except:
-    nltk.download("stopwords")
-    nltk.download("punkt")
+    lda_model = joblib.load('./model/topic_model_lda.pkl')
+    topic_vectorizer = joblib.load('./model/topic_vectorizer.pkl')
 
+    # Correct Sentiment Model Files
+    sentiment_model = joblib.load('./model/sentiment_classifier.pkl')
+    sentiment_vectorizer = joblib.load('./model/sentiment_vectorizer.pkl')
 
-print("="*70)
-print(" FIXED SENTIMENT MODEL TRAINING SCRIPT")
-print("="*70)
+    with open('./model/topic_labels.json', 'r', encoding='utf-8') as f:
+        topic_labels = json.load(f)
+        topic_labels = {int(k): v for k, v in topic_labels.items()}
 
+except Exception as e:
+    st.error(f"Error loading models: {e}")
+    st.stop()
 
-# -----------------------------------------------------
-# Load Dataset
-# -----------------------------------------------------
-print("\nStep 1: Loading dataset...")
-df = pd.read_csv("./data/course_evals_with_topics.csv")
-print(f"Loaded {len(df)} rows")
-print("Sentiment distribution:", df["sentiment"].value_counts().to_dict())
+# -------------------------------------------------
+# CLEANING FUNCTIONS
+# -------------------------------------------------
+def clean_topic_text(text):
+    text = re.sub(r'[^a-zA-Z\s]', '', str(text).lower())
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
-
-
-# -----------------------------------------------------
-# TWO CLEANING FUNCTIONS
-# -----------------------------------------------------
-
-# (A) Aggressive cleaner for Topic Modeling
-def clean_for_topic(text):
-    if pd.isna(text):
-        return ""
-
-    text = text.lower()
-    text = re.sub(r"[^a-zA-Z\s]", " ", text)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
-
-
-# (B) Light cleaner for Sentiment (keeps NOT / NO / NEVER)
-sent_stopwords = set(stopwords.words("english")) - {"not", "no", "never"}
-
-def clean_for_sentiment(text):
-    if pd.isna(text):
-        return ""
-
+# MUST MATCH TRAINING FUNCTION EXACTLY
+def clean_sentiment_text(text):
     text = text.lower()
     text = re.sub(r"[^a-zA-Z'\s]", " ", text)
-
     tokens = nltk.word_tokenize(text)
-    tokens = [t for t in tokens if t not in sent_stopwords]
-
+    tokens = [t for t in tokens if t not in stop_words]
+    tokens = [stemmer.stem(t) for t in tokens]
     return " ".join(tokens)
 
+# -------------------------------------------------
+# PREDICTION FUNCTIONS
+# -------------------------------------------------
+def get_topic_prediction(text):
+    try:
+        cleaned = clean_topic_text(text)
+        vec = topic_vectorizer.transform([cleaned])
+        probs = lda_model.transform(vec)[0]
+        topic_id = int(np.argmax(probs))
+
+        feature_names = topic_vectorizer.get_feature_names_out()
+        comp = lda_model.components_[topic_id]
+        top_idx = comp.argsort()[-10:][::-1]
+        top_words = [feature_names[i] for i in top_idx]
+
+        return {
+            'topic_id': topic_id,
+            'topic_label': topic_labels.get(topic_id, f"Topic {topic_id}"),
+            'confidence': float(probs[topic_id]),
+            'top_words': top_words,
+            'all_probabilities': {
+                topic_labels.get(i, f"Topic {i}"): float(p)
+                for i, p in enumerate(probs)
+            }
+        }
+    except Exception as e:
+        return {'error': str(e)}
 
 
-# -----------------------------------------------------
-# Apply Sentiment Cleaning Only
-# -----------------------------------------------------
-print("\nStep 2: Cleaning text (sentiment only)...")
-df["clean_text"] = df["text"].apply(clean_for_sentiment)
+def get_sentiment_prediction(text):
+    try:
+        cleaned = clean_sentiment_text(text)
+        vec = sentiment_vectorizer.transform([cleaned])
+        pred = sentiment_model.predict(vec)[0]
+        proba = sentiment_model.predict_proba(vec)[0]
 
+        return {
+            'sentiment': pred,
+            'confidence': float(max(proba)),
+            'all_probabilities': {
+                s: float(p) for s, p in zip(sentiment_model.classes_, proba)
+            }
+        }
+    except Exception as e:
+        return {'error': str(e)}
 
+# -------------------------------------------------
+# UI START
+# -------------------------------------------------
 
-# -----------------------------------------------------
-# TF-IDF Vectorizer (sentiment only)
-# -----------------------------------------------------
-print("\nStep 3: Building TF-IDF features...")
+# Session
+if "input_text" not in st.session_state:
+    st.session_state["input_text"] = ""
 
-tfidf = TfidfVectorizer(
-    ngram_range=(1, 2),
-    min_df=1,
-    max_df=0.98
+st.text_area(
+    "Student Feedback:",
+    value=st.session_state["input_text"],
+    key="input_text",
+    height=150
 )
 
-X = tfidf.fit_transform(df["clean_text"])
-y = df["sentiment"]
+# Sample Inputs
+st.markdown("### Sample Inputs")
+col1, col2, col3 = st.columns(3)
 
-print("Feature matrix:", X.shape)
-print("Vocabulary size:", len(tfidf.get_feature_names_out()))
-
-
-
-# -----------------------------------------------------
-# Train/Test Split
-# -----------------------------------------------------
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, stratify=y, random_state=42
-)
-
-
-
-# -----------------------------------------------------
-# Train Models + Cross Validation
-# -----------------------------------------------------
-print("\nStep 4: Training models...")
-
-models = {
-    "Logistic Regression": LogisticRegression(
-        max_iter=2000,
-        multi_class="multinomial",
-        solver="lbfgs",
-        class_weight="balanced",     # FIXED FOR NEUTRAL BIAS
-        random_state=42
-    ),
-    "Naive Bayes": MultinomialNB(),
-    "Decision Tree": DecisionTreeClassifier(max_depth=6, random_state=42),
-    "Random Forest": RandomForestClassifier(
-        n_estimators=150,
-        max_depth=8,
-        n_jobs=-1,
-        random_state=42
+with col1:
+    st.button(
+        "Positive Example",
+        on_click=lambda: st.session_state.update({
+            "input_text": "The practical sessions were very helpful and the lecturer explained things well."
+        })
     )
-}
+with col2:
+    st.button(
+        "Neutral Example",
+        on_click=lambda: st.session_state.update({
+            "input_text": "The course was fine, but some topics moved too fast."
+        })
+    )
+with col3:
+    st.button(
+        "Negative Example",
+        on_click=lambda: st.session_state.update({
+            "input_text": "The course was confusing and the instructions for assignments were unclear."
+        })
+    )
 
-scoring = ["accuracy", "precision_weighted", "recall_weighted", "f1_weighted"]
-cv = RepeatedStratifiedKFold(n_splits=5, n_repeats=2, random_state=42)
+# Analyze
+input_text = st.session_state["input_text"]
 
-results = {}
+if st.button("Analyze Feedback"):
+    if not input_text.strip():
+        st.warning("Please enter some text to analyze.")
+    else:
+        with st.spinner("Analyzing..."):
+            topic_result = get_topic_prediction(input_text)
+            sentiment_result = get_sentiment_prediction(input_text)
 
-for name, model in models.items():
-    print(f"Running CV for: {name}")
+            if 'error' in topic_result:
+                st.error(f"Topic Error: {topic_result['error']}")
+            elif 'error' in sentiment_result:
+                st.error(f"Sentiment Error: {sentiment_result['error']}")
+            else:
+                st.success("Analysis Complete")
+                emoji_map = {'positive': "😊", 'neutral': "😐", 'negative': "😞"}
 
-    scores = cross_validate(model, X, y, scoring=scoring, cv=cv, n_jobs=-1)
+                st.markdown("## Summary")
+                st.markdown(f"""
+**Topic:** {topic_result['topic_label']}  
+**Sentiment:** {sentiment_result['sentiment'].capitalize()} {emoji_map.get(sentiment_result['sentiment'], '')}  
+**Topic Confidence:** {topic_result['confidence']:.1%}  
+**Sentiment Confidence:** {sentiment_result['confidence']:.1%}
+                """)
 
-    results[name] = {
-        "Accuracy": scores["test_accuracy"].mean(),
-        "Precision": scores["test_precision_weighted"].mean(),
-        "Recall": scores["test_recall_weighted"].mean(),
-        "F1": scores["test_f1_weighted"].mean()
-    }
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.subheader("🔍 Topic Details")
+                    st.write("Top Words:", ", ".join(topic_result['top_words']))
+                    st.markdown("#### Topic Probabilities")
+                    for label, prob in topic_result['all_probabilities'].items():
+                        st.progress(prob, text=f"{label}: {prob:.1%}")
 
-results_df = pd.DataFrame(results).T.sort_values("F1", ascending=False)
-print("\nCross-validation results:")
-print(results_df.round(4))
+                with col2:
+                    st.subheader("📊 Sentiment Details")
+                    for s, prob in sentiment_result['all_probabilities'].items():
+                        st.progress(prob, text=f"{s.capitalize()}: {prob:.1%}")
 
+# -------------------------------------------------
+# OVERALL CHARTS
+# -------------------------------------------------
+st.subheader("📊 Overall Topic & Sentiment Summary")
 
+try:
+    df_full = pd.read_csv("./data/course_evals_with_topics_and_sentiments.csv")
 
-# -----------------------------------------------------
-# Select Best Model
-# -----------------------------------------------------
-print("\nStep 5: Selecting best model...")
+    # Topic distribution
+    topic_counts = df_full['topic_label'].value_counts().sort_index()
 
-best_name = results_df.index[0]
-best_model = models[best_name]
+    fig1, ax1 = plt.subplots(figsize=(5, 3.2))
+    sns.barplot(
+        x=topic_counts.values,
+        y=topic_counts.index,
+        palette="viridis",
+        ax=ax1
+    )
+    ax1.set_xlabel("Count", fontsize=8)
+    ax1.set_ylabel("Topic", fontsize=8)
+    ax1.set_title("Topic Distribution", fontsize=10)
+    plt.tight_layout(pad=1.5)
+    st.pyplot(fig1, use_container_width=True)
 
-best_model.fit(X_train, y_train)
+    st.markdown("###")
 
-print(f"Best Model: {best_name}")
+    # Sentiment by topic
+    sentiment_order = ["positive", "neutral", "negative"]
+    colors = ["green", "orange", "red"]
 
+    sentiment_by_topic = (
+        df_full.groupby(["topic_label", "predicted_sentiment"])
+        .size()
+        .unstack(fill_value=0)[sentiment_order]
+    )
 
+    fig2, ax2 = plt.subplots(figsize=(5, 3.2))
+    sentiment_by_topic.plot(
+        kind="bar",
+        stacked=True,
+        color=colors,
+        ax=ax2,
+        width=0.7
+    )
 
-# -----------------------------------------------------
-# Evaluate Performance
-# -----------------------------------------------------
-y_pred = best_model.predict(X_test)
-print("\nClassification Report:")
-print(classification_report(y_test, y_pred))
+    ax2.set_ylabel("Count", fontsize=8)
+    ax2.set_title("Sentiment by Topic", fontsize=10)
+    ax2.legend(title="Sentiment", prop={"size": 7})
+    plt.xticks(rotation=45, ha='right', fontsize=7)
+    plt.tight_layout(pad=1.5)
+    st.pyplot(fig2, use_container_width=True)
 
-cm = confusion_matrix(y_test, y_pred, labels=["positive", "neutral", "negative"])
-plt.figure(figsize=(8, 6))
-sns.heatmap(
-    cm,
-    annot=True,
-    fmt="d",
-    cmap="Blues",
-    xticklabels=["Positive", "Neutral", "Negative"],
-    yticklabels=["Positive", "Neutral", "Negative"]
-)
-plt.tight_layout()
-plt.savefig("./model/confusion_matrix.png")
-plt.close()
+except Exception as e:
+    st.warning(f"Unable to show charts: {e}")
 
-# Save Model Outputs
-
-print("\nStep 6: Saving model & vectorizer...")
-
-joblib.dump(best_model, "./model/sentiment_classifier.pkl")
-joblib.dump(tfidf, "./model/sentiment_vectorizer.pkl")
-
-df.to_csv("./data/course_evals_with_topics_and_sentiments.csv", index=False)
-
-print("Saved:")
-print(" - sentiment_classifier.pkl")
-print(" - sentiment_vectorizer.pkl")
-
-print("\nAll tasks completed successfully!")
-print("="*70)
+# Footer
+st.markdown("---")
+st.markdown("### About This Project")
+st.write("This app was created for coursework to analyze student evaluations using NLP.")
