@@ -1,269 +1,239 @@
-"""
-Course Evaluation Analyzer - STREAMLIT APP (FIXED VERSION)
-BBT 4206 - Business Intelligence II
-"""
-
 import streamlit as st
 import joblib
 import json
 import re
 import numpy as np
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import PorterStemmer
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# Page config
+# Page setup
 st.set_page_config(
     page_title="Course Evaluation Analyzer",
     page_icon="🎓",
     layout="wide"
 )
 
+st.title("Student Course Evaluation Analyzer")
+st.write("Analyze topics and sentiment from student course evaluations for BBT 4106 & BBT 4206.")
+
+# -------------------------------------------------------
+# NLTK setup (Streamlit + Hugging Face safe)
+# -------------------------------------------------------
+import os
+os.makedirs("nltk_data", exist_ok=True)
+nltk.data.path.append("nltk_data")
+
+for res in ["stopwords", "punkt", "punkt_tab"]:
+    try:
+        nltk.data.find(res)
+    except LookupError:
+        nltk.download(res, download_dir="nltk_data")
+
+stop_words = set(stopwords.words('english'))
+stemmer = PorterStemmer()
+# -------------------------------------------------------
+
 # Load models
-@st.cache_resource
-def load_models():
-    try:
-        lda = joblib.load('./model/topic_model_lda.pkl')
-        topic_vec = joblib.load('./model/topic_vectorizer.pkl')
-        sentiment_model = joblib.load('./model/sentiment_classifier.pkl')
-        sentiment_vec = joblib.load('./model/sentiment_vectorizer.pkl')
-        
-        with open('./model/topic_labels.json', 'r') as f:
-            labels = json.load(f)
-            labels = {int(k): v for k, v in labels.items()}
-        
-        return lda, topic_vec, sentiment_model, sentiment_vec, labels
-    except Exception as e:
-        st.error(f"Error loading models: {e}")
-        st.info("Please run training scripts first!")
-        st.stop()
+try:
+    lda_model = joblib.load('./model/topic_model_lda.pkl')
+    topic_vectorizer = joblib.load('./model/topic_vectorizer.pkl')
+    sentiment_model = joblib.load('./model/sentiment_classifier.pkl')
+    sentiment_vectorizer = joblib.load('./model/topic_vectorizer_using_tfidf.pkl')
 
-lda, topic_vec, sentiment_model, sentiment_vec, topic_labels = load_models()
+    with open('./model/topic_labels.json', 'r', encoding='utf-8') as f:
+        topic_labels = json.load(f)
+        topic_labels = {int(k): v for k, v in topic_labels.items()}
 
-# Load results
-@st.cache_data
-def load_results():
-    try:
-        return pd.read_csv('./data/course_evals_with_topics_and_sentiments.csv')
-    except:
-        return None
-
-results_df = load_results()
+except Exception as e:
+    st.error(f"Error loading models: {e}")
+    st.stop()
 
 # Cleaning functions
-def clean_for_topic(text):
+def clean_topic_text(text):
     text = re.sub(r'[^a-zA-Z\s]', '', str(text).lower())
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def clean_for_sentiment(text):
+def clean_sentiment_text(text):
     text = text.lower()
     text = re.sub(r'[^a-zA-Z\s]', '', text)
-    words = text.split()
-    stop = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for'}
-    words = [w for w in words if w not in stop and len(w) > 2]
-    return ' '.join(words)
+    tokens = nltk.word_tokenize(text)
+    tokens = [t for t in tokens if t not in stop_words]
+    tokens = [stemmer.stem(t) for t in tokens]
+    return " ".join(tokens)
 
-# Predictions
-def predict_topic(text):
-    cleaned = clean_for_topic(text)
-    X = topic_vec.transform([cleaned])
-    probs = lda.transform(X)[0]
-    topic_id = int(np.argmax(probs))
-    
-    feature_names = topic_vec.get_feature_names_out()
-    topic = lda.components_[topic_id]
-    top_words = [feature_names[i] for i in topic.argsort()[-10:][::-1]]
-    
-    return {
-        'topic_id': topic_id,
-        'topic_label': topic_labels.get(topic_id, f'Topic {topic_id}'),
-        'confidence': float(probs[topic_id]),
-        'top_words': top_words,
-        'all_probs': {topic_labels.get(i, f'Topic {i}'): float(p) 
-                     for i, p in enumerate(probs)}
-    }
+# Prediction functions
+def get_topic_prediction(text):
+    try:
+        cleaned = clean_topic_text(text)
+        vec = topic_vectorizer.transform([cleaned])
+        probs = lda_model.transform(vec)[0]
+        topic_id = int(np.argmax(probs))
 
-def predict_sentiment(text):
-    cleaned = clean_for_sentiment(text)
-    X = sentiment_vec.transform([cleaned])
-    pred = sentiment_model.predict(X)[0]
-    probs = sentiment_model.predict_proba(X)[0]
-    
-    return {
-        'sentiment': pred,
-        'confidence': float(probs.max()),
-        'all_probs': {s: float(p) for s, p in 
-                     zip(sentiment_model.classes_, probs)}
-    }
+        feature_names = topic_vectorizer.get_feature_names_out()
+        comp = lda_model.components_[topic_id]
+        top_idx = comp.argsort()[-10:][::-1]
+        top_words = [feature_names[i] for i in top_idx]
 
-# Title
-st.title("🎓 Course Evaluation Analyzer")
-st.markdown("""
-### NLP-Powered Analysis for BI Courses
-Automatically analyze student feedback using **Topic Modeling** and **Sentiment Analysis**.
-""")
+        return {
+            'topic_id': topic_id,
+            'topic_label': topic_labels.get(topic_id, f"Topic {topic_id}"),
+            'confidence': float(probs[topic_id]),
+            'top_words': top_words,
+            'all_probabilities': {
+                topic_labels.get(i, f"Topic {i}"): float(p)
+                for i, p in enumerate(probs)
+            }
+        }
+    except Exception as e:
+        return {'error': str(e)}
 
-# Sidebar with charts
-if results_df is not None:
-    with st.sidebar:
-        st.header("📊 Analysis Results")
-        
-        # Topic distribution
-        st.subheader("Topic Distribution")
-        topic_counts = results_df['topic_label'].value_counts()
-        fig1 = px.bar(
-            x=topic_counts.index,
-            y=topic_counts.values,
-            labels={'x': 'Topic', 'y': 'Count'},
-            color=topic_counts.values,
-            color_continuous_scale='Blues'
-        )
-        fig1.update_layout(showlegend=False, height=400)
-        st.plotly_chart(fig1, use_container_width=True)
-        
-        # Sentiment by topic
-        st.subheader("Sentiment by Topic")
-        sentiment_by_topic = results_df.groupby(
-            ['topic_label', 'predicted_sentiment']
-        ).size().unstack(fill_value=0)
-        
-        for sent in ['positive', 'neutral', 'negative']:
-            if sent not in sentiment_by_topic.columns:
-                sentiment_by_topic[sent] = 0
-        
-        fig2 = go.Figure()
-        fig2.add_trace(go.Bar(
-            name='Positive', 
-            x=sentiment_by_topic.index, 
-            y=sentiment_by_topic['positive'], 
-            marker_color='green'
-        ))
-        fig2.add_trace(go.Bar(
-            name='Neutral', 
-            x=sentiment_by_topic.index, 
-            y=sentiment_by_topic['neutral'], 
-            marker_color='orange'
-        ))
-        fig2.add_trace(go.Bar(
-            name='Negative', 
-            x=sentiment_by_topic.index, 
-            y=sentiment_by_topic['negative'], 
-            marker_color='red'
-        ))
-        
-        fig2.update_layout(barmode='group', height=400)
-        st.plotly_chart(fig2, use_container_width=True)
+def get_sentiment_prediction(text):
+    try:
+        cleaned = clean_sentiment_text(text)
+        vec = sentiment_vectorizer.transform([cleaned])
+        pred = sentiment_model.predict(vec)[0]
+        proba = sentiment_model.predict_proba(vec)[0]
 
-# Main area
-st.markdown("---")
-st.subheader("📝 Analyze Student Feedback")
+        return {
+            'sentiment': pred,
+            'confidence': float(max(proba)),
+            'all_probabilities': {
+                s: float(p) for s, p in zip(sentiment_model.classes_, proba)
+            }
+        }
+    except Exception as e:
+        return {'error': str(e)}
 
-input_text = st.text_area(
-    "Enter course evaluation text:",
-    height=120,
-    placeholder="Example: The labs were great and helped me learn..."
+# Initialize session state
+if "input_text" not in st.session_state:
+    st.session_state["input_text"] = ""
+
+# Text area
+st.text_area(
+    "Student Feedback:",
+    value=st.session_state["input_text"],
+    key="input_text",
+    height=150
 )
 
-# Example buttons
-col1, col2, col3, col4 = st.columns(4)
+# Sample inputs
+st.markdown("### Sample Inputs")
+col1, col2, col3 = st.columns(3)
 
 with col1:
-    if st.button("✅ Positive"):
-        input_text = "The hands-on labs were excellent and helped me understand concepts clearly."
-        st.rerun()
+    st.button("Positive Example", on_click=lambda: st.session_state.update({
+        "input_text": "The practical sessions were very helpful and the lecturer explained things well."
+    }))
 
 with col2:
-    if st.button("😐 Neutral"):
-        input_text = "The course covered required topics. Some parts were interesting."
-        st.rerun()
+    st.button("Neutral Example", on_click=lambda: st.session_state.update({
+        "input_text": "The course was fine, but some topics moved too fast."
+    }))
 
 with col3:
-    if st.button("❌ Negative"):
-        input_text = "The course was bad and poorly organized. Materials were confusing."
-        st.rerun()
+    st.button("Negative Example", on_click=lambda: st.session_state.update({
+        "input_text": "The course was confusing and the instructions for assignments were unclear."
+    }))
 
-with col4:
-    if st.button("🔄 Clear"):
-        input_text = ""
-        st.rerun()
+# Analyze button
+input_text = st.session_state["input_text"]
 
-# Analyze
-if st.button("🔍 Analyze Feedback", type="primary"):
-    if not input_text or input_text.strip() == "":
-        st.warning("Please enter text to analyze.")
+if st.button("Analyze Feedback"):
+    if not input_text.strip():
+        st.warning("Please enter some text to analyze.")
     else:
         with st.spinner("Analyzing..."):
-            topic_result = predict_topic(input_text)
-            sentiment_result = predict_sentiment(input_text)
-            
-            st.success("✅ Analysis Complete!")
-            
-            sentiment_emoji = {
-                'positive': '😊',
-                'negative': '😞',
-                'neutral': '😐'
-            }
-            
-            # Summary
-            st.markdown("## 📋 Summary")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.metric(
-                    "Topic",
-                    topic_result['topic_label'],
-                    f"{topic_result['confidence']:.1%} confidence"
-                )
-            
-            with col2:
-                st.metric(
-                    "Sentiment",
-                    f"{sentiment_result['sentiment'].capitalize()} {sentiment_emoji[sentiment_result['sentiment']]}",
-                    f"{sentiment_result['confidence']:.1%} confidence"
-                )
-            
-            st.markdown("---")
-            
-            # Details
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("### 📊 Topic Analysis")
-                st.markdown(f"**Topic:** {topic_result['topic_label']}")
-                st.markdown(f"**Confidence:** {topic_result['confidence']:.1%}")
-                st.markdown("**Key Words:**")
-                st.write(", ".join(topic_result['top_words'][:8]))
-                
-                st.markdown("**Topic Probabilities:**")
-                for topic, prob in sorted(
-                    topic_result['all_probs'].items(), 
-                    key=lambda x: x[1], 
-                    reverse=True
-                ):
-                    st.progress(prob, text=f"{topic}: {prob:.1%}")
-            
-            with col2:
-                st.markdown("### 💭 Sentiment Analysis")
-                st.markdown(f"**Sentiment:** {sentiment_result['sentiment'].capitalize()} {sentiment_emoji[sentiment_result['sentiment']]}")
-                st.markdown(f"**Confidence:** {sentiment_result['confidence']:.1%}")
-                
-                st.markdown("**Sentiment Probabilities:**")
-                for sent in ['positive', 'neutral', 'negative']:
-                    if sent in sentiment_result['all_probs']:
-                        prob = sentiment_result['all_probs'][sent]
-                        emoji = sentiment_emoji[sent]
-                        st.progress(prob, text=f"{sent.capitalize()} {emoji}: {prob:.1%}")
+            topic_result = get_topic_prediction(input_text)
+            sentiment_result = get_sentiment_prediction(input_text)
+
+            if 'error' in topic_result:
+                st.error(f"Topic Error: {topic_result['error']}")
+            elif 'error' in sentiment_result:
+                st.error(f"Sentiment Error: {sentiment_result['error']}")
+            else:
+                st.success("Analysis Complete")
+
+                emoji_map = {'positive': "😊", 'neutral': "😐", 'negative': "😞"}
+
+                st.markdown("## Summary")
+                st.markdown(f"""
+**Topic:** {topic_result['topic_label']}  
+**Sentiment:** {sentiment_result['sentiment'].capitalize()} {emoji_map.get(sentiment_result['sentiment'], '')}  
+**Topic Confidence:** {topic_result['confidence']:.1%}  
+**Sentiment Confidence:** {sentiment_result['confidence']:.1%}
+                """)
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.subheader("🔍 Topic Details")
+                    st.write("Top Words:", ", ".join(topic_result['top_words']))
+                    st.markdown("#### Topic Probabilities")
+                    for label, prob in topic_result['all_probabilities'].items():
+                        st.progress(prob, text=f"{label}: {prob:.1%}")
+
+                with col2:
+                    st.subheader("📊 Sentiment Details")
+                    for s, prob in sentiment_result['all_probabilities'].items():
+                        st.progress(prob, text=f"{s.capitalize()}: {prob:.1%}")
+
+# Charts
+st.subheader("📊 Overall Topic & Sentiment Summary")
+
+try:
+    df_full = pd.read_csv("./data/course_evals_with_topics_and_sentiments.csv")
+
+    topic_counts = df_full['topic_label'].value_counts().sort_index()
+
+    fig1, ax1 = plt.subplots(figsize=(5, 3.2))
+    sns.barplot(
+        x=topic_counts.values,
+        y=topic_counts.index,
+        palette="viridis",
+        ax=ax1
+    )
+    ax1.set_xlabel("Count", fontsize=8)
+    ax1.set_ylabel("Topic", fontsize=8)
+    ax1.set_title("Topic Distribution", fontsize=10)
+    plt.tight_layout(pad=1.5)
+    st.pyplot(fig1, use_container_width=True)
+
+    st.markdown("###")
+
+    sentiment_order = ["positive", "neutral", "negative"]
+    colors = ["green", "orange", "red"]
+
+    sentiment_by_topic = (
+        df_full.groupby(["topic_label", "predicted_sentiment"])
+        .size()
+        .unstack(fill_value=0)[sentiment_order]
+    )
+
+    fig2, ax2 = plt.subplots(figsize=(5, 3.2))
+    sentiment_by_topic.plot(
+        kind="bar",
+        stacked=True,
+        color=colors,
+        ax=ax2,
+        width=0.7
+    )
+
+    ax2.set_ylabel("Count", fontsize=8)
+    ax2.set_title("Sentiment by Topic", fontsize=10)
+    ax2.legend(title="Sentiment", prop={"size": 7})
+    plt.xticks(rotation=45, ha='right', fontsize=7)
+    plt.tight_layout(pad=1.5)
+    st.pyplot(fig2, use_container_width=True)
+
+except Exception as e:
+    st.warning(f"Unable to show charts: {e}")
 
 # Footer
 st.markdown("---")
-st.markdown("""
-## 📖 About
-
-**Topic Modeling:** Uses LDA to identify themes in evaluations  
-**Sentiment Analysis:** Uses ML to classify feedback tone
-
-**Course:** BBT 4106 & BBT 4206 - Business Intelligence  
-**Institution:** Strathmore University  
-**Academic Year:** 2024/2025
-""")
+st.markdown("### About This Project")
+st.write("This app was created for coursework to analyze student evaluations using NLP.")

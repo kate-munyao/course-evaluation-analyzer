@@ -1,147 +1,140 @@
-"""
-Topic Modeling for Course Evaluations - FIXED VERSION
-BBT 4206 - Business Intelligence II
-"""
-
+# Topic Modeling for Course Evaluations
 import pandas as pd
 import numpy as np
 import re
 import matplotlib.pyplot as plt
+import textwrap
 import joblib
 import json
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.decomposition import LatentDirichletAllocation
 
-print("="*70)
-print("TOPIC MODELING - COURSE EVALUATIONS")
-print("="*70)
+print("="*80)
+print("TOPIC MODELING FOR COURSE EVALUATIONS")
+print("="*80)
 
-# Load data
-print("\n[1/7] Loading course evaluation data...")
+# Step 1: Load the course evaluation data
+print("\n[1/9] Loading data...")
 df = pd.read_csv('./data/202511-ft_bi1_bi2_course_evaluation.csv')
-print(f"✅ Loaded {len(df)} evaluations")
+print("Loaded", len(df), "course evaluations")
 
-# Create sentiment from ratings (NOT from pre-labeled sentiment column)
-print("\n[2/7] Creating sentiment from ratings...")
-def rating_to_sentiment(rating):
-    if rating >= 4.0:
-        return 'positive'
-    elif rating >= 3.0:
-        return 'neutral'
-    else:
-        return 'negative'
-
-df['sentiment'] = df['average_course_evaluation_rating'].apply(rating_to_sentiment)
-print(f"✅ Sentiment distribution:")
-print(df['sentiment'].value_counts())
-
-# Combine text columns
-print("\n[3/7] Preparing text data...")
+# Step 2: Combine text fields
+print("\n[2/9] Combining text fields...")
+# Combine liked and recommendation columns
 df['text'] = (
-    df['f_3_Write_at_least_two_things_you_liked_about_the_teaching_and_learning_in_this_course'].fillna('') + ' ' +
-    df['f_4_Write_at_least_one_recommendation_to_improve_the_teaching_and_learning_in_this_course_(for_future_classes)'].fillna('')
+    df['f_3_Write_at_least_two_things_you_liked_about_the_teaching_and_learning_in_this_course'].fillna('') 
+    + " " 
+    + df['f_4_Write_at_least_one_recommendation_to_improve_the_teaching_and_learning_in_this_course_(for_future_classes)'].fillna('')
 )
+# remove empty rows
+df = df[df['text'].str.strip() != ""].reset_index(drop=True)
+print("Combined text for", len(df), "evaluations")
 
-df = df[df['text'].str.strip() != ''].reset_index(drop=True)
-print(f"✅ Prepared {len(df)} evaluations with text")
-
-# Clean text
-print("\n[4/7] Cleaning text...")
-def clean_text(text):
-    text = re.sub(r'[^a-zA-Z\s]', '', str(text).lower())
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
+# Step 3: Clean text
+print("\n[3/9] Cleaning text...")
+def clean_text(t):
+    t = str(t).lower()
+    t = re.sub(r'[^a-zA-Z\s]', '', t)
+    t = re.sub(r'\s+', ' ', t).strip()
+    return t
 
 df['clean_text'] = df['text'].apply(clean_text)
-print("✅ Text cleaned")
+print("Text cleaned")
+print("Sample:", df['clean_text'].iloc[0][:100], "...")
 
-# Create document-term matrix
-print("\n[5/7] Creating document-term matrix...")
+# Step 4: Document-Term Matrix
+print("\n[4/9] Creating Document-Term Matrix...")
 vectorizer = CountVectorizer(
-    max_df=0.90,
+    max_df=0.9,
     min_df=2,
     max_features=500,
     stop_words='english'
 )
+doc_term_matrix = vectorizer.fit_transform(df['clean_text'])
+print("DTM shape:", doc_term_matrix.shape)
+print("Vocabulary size:", len(vectorizer.get_feature_names_out()))
 
-dtm = vectorizer.fit_transform(df['clean_text'])
-print(f"✅ Matrix: {dtm.shape[0]} docs x {dtm.shape[1]} words")
-
-# Train LDA
-print("\n[6/7] Training topic model...")
+# Step 5: Train LDA topic model
+print("\n[5/9] Training LDA topic model...")
+n_topics = 5
 lda = LatentDirichletAllocation(
-    n_components=5,
-    random_state=42,
-    max_iter=20,
-    n_jobs=-1
+    n_components=n_topics,
+    learning_method='online',
+    random_state=53,
+    max_iter=15,
+    n_jobs=1 # safer for Windows
 )
+lda.fit(doc_term_matrix)
+print("Model trained")
+print("Perplexity:", lda.perplexity(doc_term_matrix))
 
-lda.fit(dtm)
-print(f"✅ Trained (Perplexity: {lda.perplexity(dtm):.2f})")
-
-# Show topics
-print("\n" + "="*70)
-print("DISCOVERED TOPICS:")
-print("="*70)
+# Step 6: Show topics
+print("\n[6/9] Discovered Topics")
+print("="*80)
 feature_names = vectorizer.get_feature_names_out()
+for i, topic in enumerate(lda.components_):
+    top_words = [feature_names[j] for j in topic.argsort()[:-11:-1]]
+    print("\nTopic", i+1)
+    print(" ", " | ".join(top_words))
 
-for topic_idx, topic in enumerate(lda.components_):
-    top_words = [feature_names[i] for i in topic.argsort()[-10:][::-1]]
-    print(f"\nTopic {topic_idx + 1}: {' | '.join(top_words)}")
+# Step 7: Assign topic to each evaluation
+print("\n[7/9] Assigning topics...")
+topic_probs = lda.transform(doc_term_matrix)
+df['dominant_topic'] = topic_probs.argmax(axis=1)
+df['topic_probability'] = topic_probs.max(axis=1)
+print("Done assigning topics")
 
-# Assign topics
-topic_results = lda.transform(dtm)
-df['dominant_topic'] = topic_results.argmax(axis=1)
-df['topic_probability'] = topic_results.max(axis=1)
+# Plot distribution
+plt.figure(figsize=(10, 5))
+topic_counts = df['dominant_topic'].value_counts().sort_index()
+topic_counts.plot(kind='bar')
+plt.title("Topic Distribution")
+plt.xlabel("Topic ID")
+plt.ylabel("Count")
+for i, c in enumerate(topic_counts):
+    plt.text(i, c + 0.3, str(c), ha='center')
+plt.tight_layout()
+plt.savefig('./model/topic_distribution.png')
+plt.close()
 
-# Label topics
+# Step 8: Representative examples
+print("\n[8/9] Representative evaluations")
+print("="*80)
+for t in range(n_topics):
+    group = df[df['dominant_topic'] == t]
+    if len(group) == 0:
+        continue
+    top_examples = group.nlargest(2, 'topic_probability')
+    print("\nTopic", t+1, "(", len(group), "evaluations )")
+    print("-" * 70)
+    for idx, row in top_examples.iterrows():
+        print("\nExample (confidence =", round(row['topic_probability'], 2), ")")
+        print(textwrap.fill(row['text'][:300], width=80))
+
+# Step 9: Suggested topic labels
+print("\n[9/9] Topic labeling")
+print("="*80)
 topic_labels = {
-    0: "Assessment Methods and Feedback",
-    1: "Course Content and Structure",
-    2: "Learning Resources and Materials",
-    3: "Practical Labs and Hands-on Learning",
-    4: "Teaching Quality and Engagement"
+    0: "Course Content and Structure",
+    1: "Teaching Quality and Engagement",
+    2: "Practical Labs and Hands-on Learning",
+    3: "Learning Resources and Materials",
+    4: "Assessment Methods and Feedback"
 }
+print("\nSuggested labels:")
+for k, v in topic_labels.items():
+    print("Topic", k+1, ":", v)
 
 df['topic_label'] = df['dominant_topic'].map(topic_labels)
 
-# Visualize
-print("\n[7/7] Creating visualization...")
-plt.figure(figsize=(10, 6))
-topic_counts = df['dominant_topic'].value_counts().sort_index()
-
-plt.bar(range(len(topic_counts)), topic_counts.values, 
-        color='steelblue', edgecolor='black')
-plt.xlabel('Topic ID', fontsize=12)
-plt.ylabel('Number of Evaluations', fontsize=12)
-plt.title('Topic Distribution', fontsize=14, fontweight='bold')
-plt.xticks(range(len(topic_counts)), 
-          [f"Topic {i+1}" for i in range(len(topic_counts))])
-
-for i, count in enumerate(topic_counts.values):
-    plt.text(i, count + 1, str(count), ha='center', 
-            fontsize=11, fontweight='bold')
-
-plt.tight_layout()
-plt.savefig('./model/topic_distribution.png', dpi=150, bbox_inches='tight')
-print("✅ Chart saved")
-plt.close()
-
-# Save
-print("\n[SAVING] Saving models and data...")
-df[['text', 'clean_text', 'sentiment', 'average_course_evaluation_rating', 
-    'dominant_topic', 'topic_label', 'topic_probability']].to_csv(
-    './data/course_evals_with_topics.csv', index=False
-)
-
+# Saving
+print("\nSaving results...")
+df.to_csv('./data/course_evals_with_topics.csv', index=False)
 joblib.dump(lda, './model/topic_model_lda.pkl')
 joblib.dump(vectorizer, './model/topic_vectorizer.pkl')
-
-with open('./model/topic_labels.json', 'w') as f:
+with open('./model/topic_labels.json', "w") as f:
     json.dump(topic_labels, f, indent=2)
-
-print("✅ All saved!")
-print("\n" + "="*70)
-print("TOPIC MODELING COMPLETE!")
-print("="*70)
-print(f"\nNext: Run sentiment analysis")
+print("Saved everything.")
+print("="*80)
+print("TOPIC MODELING COMPLETE")
+print("="*80)
