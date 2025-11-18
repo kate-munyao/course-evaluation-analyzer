@@ -10,3 +10,4 @@ scikit-learn~=1.7.0
 wordcloud~=1.9.4
 google~=3.0.0
 protobuf<6
+plotly
