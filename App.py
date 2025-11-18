@@ -67,14 +67,25 @@ def clean_topic_text(text):
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-# MUST MATCH TRAINING FUNCTION EXACTLY
+
+# -------------------------------------------------
+# FINAL FIXED SENTIMENT CLEANING
+# -------------------------------------------------
 def clean_sentiment_text(text):
+    """
+    Final simplified cleaning to match LogisticRegression training.
+    - No stopword removal
+    - No stemming
+    - Keep words as-is except basic cleaning
+    """
+    if not isinstance(text, str):
+        return ""
+
     text = text.lower()
-    text = re.sub(r"[^a-zA-Z'\s]", " ", text)
-    tokens = nltk.word_tokenize(text)
-    tokens = [t for t in tokens if t not in stop_words]
-    tokens = [stemmer.stem(t) for t in tokens]
-    return " ".join(tokens)
+    text = re.sub(r"[^a-zA-Z\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
 
 # -------------------------------------------------
 # PREDICTION FUNCTIONS
@@ -105,22 +116,29 @@ def get_topic_prediction(text):
         return {'error': str(e)}
 
 
+
+# -------------------------------------------------
+# FINAL FIXED SENTIMENT PREDICTION
+# -------------------------------------------------
 def get_sentiment_prediction(text):
     try:
         cleaned = clean_sentiment_text(text)
-        vec = sentiment_vectorizer.transform([cleaned])
-        pred = sentiment_model.predict(vec)[0]
-        proba = sentiment_model.predict_proba(vec)[0]
+
+        X = sentiment_vectorizer.transform([cleaned])
+        pred = sentiment_model.predict(X)[0]
+        proba = sentiment_model.predict_proba(X)[0]
 
         return {
-            'sentiment': pred,
-            'confidence': float(max(proba)),
-            'all_probabilities': {
-                s: float(p) for s, p in zip(sentiment_model.classes_, proba)
+            "sentiment": pred,
+            "confidence": float(max(proba)),
+            "all_probabilities": {
+                cls: float(p) for cls, p in zip(sentiment_model.classes_, proba)
             }
         }
+
     except Exception as e:
-        return {'error': str(e)}
+        return {"error": str(e)}
+
 
 # -------------------------------------------------
 # UI START
