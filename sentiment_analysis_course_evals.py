@@ -34,43 +34,40 @@ print("="*70)
 print("SENTIMENT ANALYSIS FOR COURSE EVALUATIONS")
 print("="*70)
 
-# -----------------------------------------------------------
 # 1. Load dataset
-# -----------------------------------------------------------
+
 print("\nStep 1: Loading data...")
 df = pd.read_csv("./data/course_evals_with_topics.csv")
 print(f"Loaded {len(df)} rows")
 print("Sentiment breakdown:", df["sentiment"].value_counts().to_dict())
 
-# -----------------------------------------------------------
-# 2. Preprocess text (clean for sentiment)
-# -----------------------------------------------------------
+
+# 2. Preprocess text 
+
 print("\nStep 2: Cleaning text...")
 
-stop_words = set(stopwords.words("english"))
-stemmer = PorterStemmer()
+stop_words = set(stopwords.words("english")) - {"not", "no", "never"}
 
 def clean_text_for_sentiment(text):
     if pd.isna(text):
         return ""
     text = text.lower()
-    text = re.sub(r"[^a-zA-Z\s]", "", text)
+    text = re.sub(r"[^a-zA-Z\s]", " ", text)
     tokens = nltk.word_tokenize(text)
     tokens = [w for w in tokens if w not in stop_words]
-    tokens = [stemmer.stem(w) for w in tokens]
     return " ".join(tokens)
 
-# Always use the raw text column
-df["clean_text_sa"] = df["text"].apply(clean_text_for_sentiment)
-print("Finished preprocessing.")
 
-# -----------------------------------------------------------
 # 3. TF-IDF vectorizer
-# -----------------------------------------------------------
+
 print("\nStep 3: Building TF-IDF features...")
 
-tfidf = TfidfVectorizer(max_features=1000, ngram_range=(1, 2))
-X = tfidf.fit_transform(df["clean_text_sa"])
+tfidf = TfidfVectorizer(
+    ngram_range=(1,2),
+    min_df=2,
+    max_df=0.95
+)
+X = tfidf.fit_transform(df["clean_text"])
 y = df["sentiment"]
 
 print("Feature matrix:", X.shape)
@@ -81,9 +78,8 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, stratify=y, random_state=42
 )
 
-# -----------------------------------------------------------
 # 4. Train models + cross-validation
-# -----------------------------------------------------------
+
 print("\nStep 4: Training models...")
 
 models = {
@@ -122,9 +118,8 @@ results_df = pd.DataFrame(cv_results).T.sort_values("F1-Score", ascending=False)
 print("\nCross-validation results:")
 print(results_df.round(4))
 
-# -----------------------------------------------------------
 # 5. Select best model
-# -----------------------------------------------------------
+
 print("\nStep 5: Selecting best model...")
 
 best_model_name = results_df.index[0]
@@ -157,17 +152,15 @@ plt.tight_layout()
 plt.savefig("./model/confusion_matrix.png", dpi=150)
 plt.close()
 
-# -----------------------------------------------------------
 # 6. Predict full dataset
-# -----------------------------------------------------------
+
 print("\nStep 6: Predicting sentiment for full dataset...")
 
 df["predicted_sentiment"] = best_model.predict(X)
 df["prediction_confidence"] = best_model.predict_proba(X).max(axis=1)
 
-# -----------------------------------------------------------
 # 7. Sentiment per topic
-# -----------------------------------------------------------
+
 print("\nStep 7: Analysing sentiment per topic...")
 
 sentiment_by_topic = df.groupby(
@@ -197,9 +190,8 @@ plt.close()
 
 print(sentiment_by_topic)
 
-# -----------------------------------------------------------
 # 8. Save everything
-# -----------------------------------------------------------
+
 print("\nStep 8: Saving output...")
 
 df.to_csv("./data/course_evals_with_topics_and_sentiments.csv", index=False)
@@ -210,9 +202,8 @@ print("Saved:")
 print(" - sentiment_classifier.pkl")
 print(" - topic_vectorizer_using_tfidf.pkl")
 
-# -----------------------------------------------------------
 # Word clouds
-# -----------------------------------------------------------
+
 print("\nGenerating word clouds...")
 
 fig, axes = plt.subplots(1, 3, figsize=(18, 6))
