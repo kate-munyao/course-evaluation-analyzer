@@ -12,41 +12,41 @@
 
 | **Details**                                                                                        | **Comment** |
 |:---------------------------------------------------------------------------------------------------|:------------|
-| **Student ID:**                                                                                    |             |
-| **Name:**                                                                                          |             |
-| **What part of the lab did you personally contribute to,** <br>**and what did you learn from it?** |             |
+| **Student ID:**                                                                                    |    144954         |
+| **Name:**                                                                                          |Brianna Muthoni        |
+| **What part of the lab did you personally contribute to,** <br>**and what did you learn from it?** |   Worked on improving the Streamlit interface, including sample input buttons, layout adjustments, and connecting the sentiment and topic model predictions to the app. Helped debug session state issues, chart sizes, and the input field logic. Also contributed to testing the model outputs especially checking neutral vs negative prediction consistency  and verifying that all saved model files loaded correctly. Learned about Streamlit state management, UI–model integration, and how to troubleshoot deployment errors.     |
 
 **Member 2**
 
 | **Details**                                                                                        | **Comment** |
 |:---------------------------------------------------------------------------------------------------|:------------|
-| **Student ID:**                                                                                    |             |
-| **Name:**                                                                                          |             |
-| **What part of the lab did you personally contribute to,** <br>**and what did you learn from it?** |             |
+| **Student ID:**                                                                                    |146569         |
+| **Name:**                                                                                          | Jude Muriithi         |
+| **What part of the lab did you personally contribute to,** <br>**and what did you learn from it?** |   Worked on integrating topic predictions and sentiment predictions into the final combined dataset. Built the summary statistics, confusion matrix visualizations, and word cloud generation. Helped write logic to map model outputs into readable insights used in the UI. Learned about creating meaningful model visualizations, working with Matplotlib/Seaborn, and how to convert raw ML outputs into user-friendly dashboards for non-technical audiences.          |
 
 **Member 3**
 
 | **Details**                                                                                        | **Comment** |
 |:---------------------------------------------------------------------------------------------------|:------------|
-| **Student ID:**                                                                                    |             |
-| **Name:**                                                                                          |             |
-| **What part of the lab did you personally contribute to,** <br>**and what did you learn from it?** |             |
+| **Student ID:**                                                                                    | 147700            |
+| **Name:**                                                                                          |    Natasha George         |
+| **What part of the lab did you personally contribute to,** <br>**and what did you learn from it?** |    Worked on cleaning and preprocessing the dataset, including text normalization, stopword removal, and tokenization. Contributed to testing multiple preprocessing strategies to reduce noise before topic modelling. Helped validate that the final cleaned text produced stable topic assignments and improved sentiment predictions. Learned about the impact of preprocessing choices on model performance, how to debug inconsistent text outputs across notebooks, and how data quality directly affects downstream results.        |
 
 **Member 4**
 
 | **Details**                                                                                        | **Comment** |
 |:---------------------------------------------------------------------------------------------------|:------------|
-| **Student ID:**                                                                                    |             |
-| **Name:**                                                                                          |             |
-| **What part of the lab did you personally contribute to,** <br>**and what did you learn from it?** |             |
+| **Student ID:**                                                                                    | 145656            |
+| **Name:**                                                                                          |  Ronald Mutarura          |
+| **What part of the lab did you personally contribute to,** <br>**and what did you learn from it?** | Developed the sentiment analysis model, including TF-IDF feature extraction, model selection, and hyperparameter tuning. Ran cross-validation for Logistic Regression, Naïve Bayes, Decision Trees, and Random Forests to determine the best-performing classifier. Helped evaluate precision, recall, and F1-score for each class. Learned about balancing multi-class sentiment data (positive, neutral, negative), the importance of evaluation metrics beyond accuracy, and the challenges of interpreting neutral sentiment.            |
 
 **Member 5**
 
 | **Details**                                                                                        | **Comment** |
 |:---------------------------------------------------------------------------------------------------|:------------|
-| **Student ID:**                                                                                    |             |
-| **Name:**                                                                                          |             |
-| **What part of the lab did you personally contribute to,** <br>**and what did you learn from it?** |             |
+| **Student ID:**                                                                                    |145060             |
+| **Name:**                                                                                          |Catherine Munyao           |
+| **What part of the lab did you personally contribute to,** <br>**and what did you learn from it?** | Implemented the topic modelling pipeline using LDA, tuned the number of topics, and evaluated coherence scores. Worked on creating interpretable topic labels based on top keywords. Assisted in connecting the topic model outputs to the combined dataset used for sentiment analysis. Learned how unsupervised learning differs from supervised approaches, how to interpret topic-word distributions, and the importance of naming topics in a way that stakeholders can understand.            |
 
 ## Scenario
 
@@ -88,8 +88,8 @@ Also include (in the same video) the user interface hosted on hugging face or st
 
 | **Key**                             | **Value** |
 |:------------------------------------|:----------|
-| **Link to the video:**              |           |
-| **Link to the hosted application:** |           |
+| **Link to the video:**              |     https://youtu.be/vIFKjn64KNg      |
+| **Link to the hosted application:** |  https://course-evaluation-analyzer-uemqsxoe3yg9v7eajcwt5u.streamlit.app/         |
 
 
 ## Grading Approach
